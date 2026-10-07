@@ -80,13 +80,12 @@ function sum(a,f){return a.reduce((t,x)=>t+(+f(x)||0),0);}
 function calcWallets(st,log,pay,tr){
   tr=tr||[];
   const paid=pay.filter(p=>p.status==='Paid');
-  const pw=w=>sum(paid.filter(p=>(p.wallet==='GCash'||p.wallet==='Personal'?p.wallet:'Cash')===w),p=>p.amount);
+  const pw=w=>sum(paid.filter(p=>(p.wallet==='GCash'?'GCash':'Cash')===w),p=>p.amount);
   const tIn=w=>sum(tr.filter(x=>x.to===w),x=>x.amount),tOut=w=>sum(tr.filter(x=>x.from===w),x=>x.amount);
   const cash=(+st.opening_cash||0)+sum(log,l=>l.sales)-sum(log,l=>l.gsales)+sum(log,l=>l.fee)+sum(log,l=>l.cashin)-sum(log,l=>l.cashout)
     -(sum(log,l=>l.stock)-sum(log,l=>l.gstock))-(sum(log,l=>l.opex)-sum(log,l=>l.gopex))-pw('Cash')+tIn('Cash')-tOut('Cash');
   const gcash=(+st.opening_gcash||0)+sum(log,l=>l.gsales)-sum(log,l=>l.cashin)+sum(log,l=>l.cashout)+sum(log,l=>l.cofee)-sum(log,l=>l.gstock)-sum(log,l=>l.gopex)-pw('GCash')+tIn('GCash')-tOut('GCash');
-  const personal=(+st.opening_personal||0)+tIn('Personal')-tOut('Personal')-pw('Personal');
-  return{cash,gcash,personal,total:cash+gcash,all:cash+gcash+personal};
+  return{cash,gcash,total:cash+gcash};
 }
 function calcCash(st,log,pay,tr){return calcWallets(st,log,pay,tr).total;}
 function avgNet(log,today,N){
@@ -96,26 +95,17 @@ function avgNet(log,today,N){
   const first=rec.reduce((m,l)=>l.date<m?l.date:m,rec[0].date);
   return sum(rec,l=>(+l.sales)+(+l.fee||0)+(+l.cofee||0)-(+l.stock)-(+l.opex))/(diffDays(first,today)+1);
 }
-function buildEvents(pay,today,end,pred){
+function forecast(st,log,pay,today,H,tr){
+  H=H||30;
+  const w=calcWallets(st,log,pay,tr),cash0=w.total,daily=avgNet(log,today,14),end=addDays(today,H),buffer=+st.buffer||0;
   const events=[];
-  pay.filter(p=>p.status!=='Paid'&&pred(p)).forEach(p=>{
+  pay.filter(p=>p.status!=='Paid').forEach(p=>{
     const mk=due=>({day:Math.max(0,diffDays(today,due)),amount:+p.amount,type:p.type,name:p.name,due,overdue:due<today});
     if(p.due<=end)events.push(mk(p.due));
     let due=p.repeat&&p.repeat!=='none'?addRepeat(p.due,p.repeat):null;
     while(due&&due<=end){if(due>=today)events.push(mk(due));due=addRepeat(due,p.repeat);}
   });
   events.sort((a,b)=>a.day-b.day||a.due.localeCompare(b.due));
-  return events;
-}
-function personalPlan(st,log,pay,tr,today){
-  const bal=calcWallets(st,log,pay,tr).personal,ev=buildEvents(pay,today,addDays(today,30),p=>p.type==='Personal');
-  const due={};[7,14,30].forEach(n=>{due[n]=sum(ev.filter(e=>e.day<=n),e=>e.amount);});
-  return{bal,due,need7:Math.max(0,due[7]-bal),need30:Math.max(0,due[30]-bal),events:ev};
-}
-function forecast(st,log,pay,today,H,tr){
-  H=H||30;
-  const w=calcWallets(st,log,pay,tr),cash0=w.total,daily=avgNet(log,today,14),end=addDays(today,H),buffer=+st.buffer||0;
-  const events=buildEvents(pay,today,end,p=>p.type!=='Personal');
   const series=[];let bal=cash0,min=Infinity,minDay=0,firstNeg=null;
   for(let d=0;d<=H;d++){
     if(d>0)bal+=daily;
@@ -126,7 +116,7 @@ function forecast(st,log,pay,today,H,tr){
   }
   const due={},proj={};
   [7,14,30].forEach(n=>{due[n]=sum(events.filter(e=>e.day<=n),e=>e.amount);proj[n]=series[Math.min(n,H)].bal;});
-  return{cash0,cash:w.cash,gcash:w.gcash,personal:personalPlan(st,log,pay,tr,today),daily,series,min,minDay,minDate:addDays(today,minDay),firstNeg,due,proj,
+  return{cash0,cash:w.cash,gcash:w.gcash,daily,series,min,minDay,minDate:addDays(today,minDay),firstNeg,due,proj,
     safe:Math.max(0,Math.floor(min-buffer)),overdue:sum(events.filter(e=>e.overdue),e=>e.amount),events};
 }
 function monthSummary(st,log,pay,ym){
@@ -208,20 +198,16 @@ function renderHome(){
     else if(m.totalNet<0)verdict='Kumikita/pantay ang store, pero nauubos sa personal na gastos.';
     else verdict='Positibo ang store at ang kabuuan ngayong buwan 👍';
   }
-  return `<div class="card"><h3>Pera ng store (Cash + GCash)</h3><div class="big ${cls(f.cash0)}">${peso(f.cash0)}</div>
+  return `<div class="card"><h3>Kabuuang pera (Cash + GCash)</h3><div class="big ${cls(f.cash0)}">${peso(f.cash0)}</div>
 <div class="grid2" style="margin:8px 0"><div class="card" style="margin:0;padding:10px;background:#f3f5f4"><div class="sm mute">💵 Cash</div><b class="${cls(f.cash)}">${peso(f.cash)}</b></div><div class="card" style="margin:0;padding:10px;background:#f3f5f4"><div class="sm mute">📱 GCash</div><b class="${cls(f.gcash)}">${peso(f.gcash)}</b></div></div>
-<div class="sm mute">Pwede mong kunin sa store (allowance) bukod sa bayarin ng store: <b>${peso(f.safe)}</b></div></div>
+<div class="sm mute">Pwede mong kunin (personal) bukod sa nakalistang bayarin: <b>${peso(f.safe)}</b></div></div>
 <div class="banner ${b}">${msg}${notes.map(n=>`<div class="sm" style="font-weight:400;margin-top:4px">${n}</div>`).join('')}</div>
-<div class="card"><h3>Pera ko (personal)</h3><div class="big ${cls(f.personal.bal)}">${peso(f.personal.bal)}</div>
-<div class="sm mute" style="margin:4px 0 8px">Due na personal: 7 araw <b>${peso(f.personal.due[7])}</b> · 14 araw <b>${peso(f.personal.due[14])}</b> · 30 araw <b>${peso(f.personal.due[30])}</b></div>
-${f.personal.need30>0?`<div class="banner ${f.personal.need30>f.safe?'bad':'warn'}" style="margin:0 0 8px">Kulang ang personal mo ng <b>${peso(f.personal.need30)}</b> sa susunod na 30 araw. ${f.personal.need30>f.safe?`Hindi kaya ng store: ${peso(f.safe)} lang ang pwede mong kunin. Bawasan ang gastos o dagdagan ang kita.`:`Kaya ng store (pwede mong kunin ${peso(f.safe)}). Ilipat sa Araw-araw → Lipat pera (Cash → Personal).`}</div>`:'<div class="sm pos" style="margin-bottom:8px">Sapat ang personal mo sa susunod na 30 araw 👍</div>'}
-${f.personal.events.slice(0,4).map(e=>`<div class="row"><span>${esc(e.name)} <span class="sm mute">${dlabel(e.due)}${e.overdue?' · LAMPAS':''}</span></span><b>${peso(e.amount)}</b></div>`).join('')}</div>
-<div class="card"><h3>Forecast 30 araw (store)</h3>${spark(f.series)}
+<div class="card"><h3>Forecast 30 araw</h3>${spark(f.series)}
 <table><tr><th></th><th>7 araw</th><th>14 araw</th><th>30 araw</th></tr>
 <tr><td>Due</td><td>${peso(f.due[7])}</td><td>${peso(f.due[14])}</td><td>${peso(f.due[30])}</td></tr>
 <tr><td>Pera pagkatapos</td>${[7,14,30].map(n=>`<td class="${cls(f.proj[n])}"><b>${peso(f.proj[n])}</b></td>`).join('')}</tr></table>
 <div class="sm mute" style="margin-top:6px">Batay sa average mong pasok/labas (huling 14 araw): ${peso(f.daily)}/araw</div></div>
-<div class="card"><h3>Susunod na bayarin (store)</h3>${up}</div>
+<div class="card"><h3>Susunod na bayarin</h3>${up}</div>
 <div class="card"><h3>Ngayong buwan</h3>
 <div class="row"><span>Benta</span><b>${peso(m.sales)}</b></div>
 <div class="row"><span class="mute">Kita sa GCash cash-in/out (fees)</span><span>${peso(m.fee)}</span></div>
@@ -252,18 +238,14 @@ function renderLog(){
 <label>Note (optional)</label><input name="notes" maxlength="200">
 <button class="full" ${ui.busy?'disabled':''}>Save</button></form>
 ${td.length?`<div class="sm mute" style="margin-top:8px">Today may ${td.length} entry na (benta ${peso(sum(td,l=>l.sales))}). Idadagdag ang bago dito.</div>`:''}</div>
-<div class="card"><h3>Lipat pera (Cash / GCash / Personal)</h3>
-<form id="fTr"><div class="grid2"><div><label>Mula sa</label><select name="from"><option>Cash</option><option>GCash</option><option>Personal</option></select></div><div><label>Papunta sa</label><select name="to"><option>Personal</option><option>GCash</option><option>Cash</option></select></div></div>
+<div class="card"><h3>Lipat pera (Cash ↔ GCash)</h3>
+<form id="fTr"><div class="grid2"><div><label>Mula sa</label><select name="from"><option>Cash</option><option>GCash</option></select></div><div><label>Papunta sa</label><select name="to"><option>GCash</option><option>Cash</option></select></div></div>
 <label>Halaga</label><input type="number" name="amount" inputmode="decimal" min="0" step="any" required>
 <button class="full">Ilipat</button></form>
 ${S.transfers.slice().sort((a,b)=>b.date.localeCompare(a.date)).slice(0,5).map(x=>`<div class="item"><div class="sm">${dlabel(x.date)} · ${esc(x.from)} → ${esc(x.to)} · <b>${peso(x.amount)}</b></div><button class="danger sm" data-act="deltr" data-id="${esc(x.id)}">✕</button></div>`).join('')}</div>
 <div class="card"><h3>Huling entries</h3>${rec.map(l=>`<div class="item"><div><b>${dlabel(l.date)}</b> <span class="sm mute">${esc(l.notes)}</span><div class="sm">Benta ${peso(l.sales)} · Stock ${peso(l.stock)} · Gastos ${peso(l.opex)}</div>${l.cashin||l.cashout||l.fee||l.cofee?`<div class="sm mute">GCash in ${peso(l.cashin)} · out ${peso(l.cashout)} · fee ${peso((+l.fee||0)+(+l.cofee||0))}</div>`:''}${l.gsales?`<div class="sm mute">Benta via GCash ${peso(l.gsales)}</div>`:''}${l.gstock||l.gopex?`<div class="sm mute">Binayad via GCash: stock ${peso(l.gstock)} · gastos ${peso(l.gopex)}</div>`:''}</div><button class="danger sm" data-act="dellog" data-id="${esc(l.id)}">✕</button></div>`).join('')||'<div class="mute">Wala pa.</div>'}</div>`;
 }
 
-function payBtns(p){
-  const ws=p.type==='Personal'?['Personal','Cash','GCash']:['Cash','GCash','Personal'];
-  return ws.map((w,i)=>`<button class="sm ${i?'ghost':''}" data-act="pay" data-w="${w}" data-id="${esc(p.id)}">✓ ${w==='Personal'?'Personal':w}</button>`).join('');
-}
 function renderBills(){
   const t=todayStr(),F=ui.filter;
   const open=S.pay.filter(p=>p.status!=='Paid'&&(F==='all'||p.type===F)).sort((a,b)=>a.due.localeCompare(b.due));
@@ -285,7 +267,7 @@ ${e?'':`<div class="grid2"><div><label>Petsa ng resibo</label><input type="date"
     const d=diffDays(t,p.due),od=d<0;
     return `<div class="item"><div><b>${esc(p.name)}</b><span class="tag">${esc(p.type)}</span>${p.repeat&&p.repeat!=='none'?'<span class="tag">↻ '+esc(p.repeat)+'</span>':''}
 <div class="sm ${od?'neg':'mute'}">${od?'LAMPAS '+(-d)+' araw · ':d===0?'Due ngayon · ':'Due '+d+' araw · '}${dlabel(p.due)}</div>
-<div class="acts">${payBtns(p)}<button class="ghost sm" data-act="edit" data-id="${esc(p.id)}">Edit</button><button class="danger sm" data-act="delbill" data-id="${esc(p.id)}">✕</button></div></div>
+<div class="acts"><button class="sm" data-act="pay" data-w="Cash" data-id="${esc(p.id)}">✓ Bayad (Cash)</button><button class="sm" data-act="pay" data-w="GCash" data-id="${esc(p.id)}">✓ Bayad (GCash)</button><button class="ghost sm" data-act="edit" data-id="${esc(p.id)}">Edit</button><button class="danger sm" data-act="delbill" data-id="${esc(p.id)}">✕</button></div></div>
 <b>${peso(p.amount)}</b></div>`;}).join('')||'<div class="mute">Walang bayarin 🎉</div>';
   return `${form}<div class="card"><button class="full" style="margin:0" data-act="newbill">+ Dagdag na bayarin</button></div>
 <div class="chips">${chips}</div><div class="card"><h3>Hindi pa bayad (${open.length}) · ${peso(sum(open,p=>p.amount))}</h3>${list}</div>
@@ -299,11 +281,10 @@ function renderSet(){
 <label>PIN (kung nilagay mo sa Code.gs)</label><input name="pin" value="${esc(cfg.pin)}" type="password" autocomplete="off">
 <button class="full">I-save at i-test</button></form></div>`;
   return conn+`<div class="card"><h3>Pera</h3><form id="fSet">
-<label>Panimulang CASH ng STORE (cash on hand ng store nung nagsimula ka mag-log)</label><input type="number" name="opening_cash" inputmode="decimal" step="any" value="${+s.opening_cash||0}">
-<label>Panimulang GCASH (balance ng GCash wallet nung nagsimula ka mag-log)</label><input type="number" name="opening_gcash" inputmode="decimal" step="any" value="${+s.opening_gcash||0}">
-<label>Panimulang PERSONAL (cash na pang-sarili mo, hindi sa store)</label><input type="number" name="opening_personal" inputmode="decimal" step="any" value="${+s.opening_personal||0}">
+<label>Panimulang CASH (cash na hawak mo nung nagsimula ka mag-log)</label><input type="number" name="opening_cash" inputmode="decimal" step="any" value="${+s.opening_cash||0}">
+<label>Panimulang GCASH (balance ng GCash wallet mo nung nagsimula ka mag-log)</label><input type="number" name="opening_gcash" inputmode="decimal" step="any" value="${+s.opening_gcash||0}">
 <label>Tantyang margin ng tubo sa benta (%)</label><input type="number" name="margin_pct" inputmode="decimal" step="any" value="${+s.margin_pct||0}">
-<label>Buffer ng STORE (pinakamababang pera ng store na laging may natitira)</label><input type="number" name="buffer" inputmode="decimal" step="any" value="${+s.buffer||0}">
+<label>Buffer (pinakamababang pera na gusto mong laging may natitira)</label><input type="number" name="buffer" inputmode="decimal" step="any" value="${+s.buffer||0}">
 <button class="full">I-save</button></form></div>`;
 }
 
@@ -350,7 +331,7 @@ document.addEventListener('submit',async ev=>{
     const ok=await run({action:'savePayable',id:ui.edit||undefined,type:d.type,name:d.name,amount:d.amount,due:d.due,repeat:d.repeat,notes:d.notes},'Na-save ✓');
     if(ok){ui.form=false;ui.edit=null;render();}
   }else if(f.id==='fSet'){
-    await run({action:'saveSettings',settings:{opening_cash:d.opening_cash,opening_gcash:d.opening_gcash,opening_personal:d.opening_personal,margin_pct:d.margin_pct,buffer:d.buffer}},'Na-save ✓');
+    await run({action:'saveSettings',settings:{opening_cash:d.opening_cash,opening_gcash:d.opening_gcash,margin_pct:d.margin_pct,buffer:d.buffer}},'Na-save ✓');
   }else if(f.id==='fCfg'){
     cfg={url:d.url.trim(),pin:d.pin.trim()};
     localStorage.setItem('pk_cfg',JSON.stringify(cfg));
