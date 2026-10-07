@@ -1,0 +1,347 @@
+<!DOCTYPE html>
+<html lang="tl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#0f766e">
+<title>Pera Ko</title>
+<style>
+:root{--bg:#f3f5f4;--card:#fff;--ink:#14201d;--mute:#667570;--line:#e2e8e5;--pri:#0f766e;--ok:#15803d;--okbg:#e7f6ec;--warn:#b45309;--warnbg:#fff4de;--bad:#b91c1c;--badbg:#fde8e8}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.4 system-ui,-apple-system,Segoe UI,Roboto,sans-serif;padding-bottom:76px}
+header{background:var(--pri);color:#fff;padding:14px 16px;display:flex;justify-content:space-between;align-items:center;position:sticky;top:0;z-index:5}
+header b{font-size:18px}header small{opacity:.85;font-size:12px}
+main{padding:12px;max-width:560px;margin:0 auto}
+.card{background:var(--card);border-radius:14px;padding:14px;margin-bottom:12px;box-shadow:0 1px 2px rgba(0,0,0,.06)}
+.card h3{margin:0 0 8px;font-size:13px;color:var(--mute);text-transform:uppercase;letter-spacing:.04em}
+.big{font-size:32px;font-weight:700}
+.row{display:flex;justify-content:space-between;gap:10px;padding:6px 0;border-bottom:1px solid var(--line)}
+.row:last-child{border-bottom:0}
+.mute{color:var(--mute)}.sm{font-size:12px}
+.neg{color:var(--bad)}.pos{color:var(--ok)}
+.banner{border-radius:14px;padding:12px 14px;margin-bottom:12px;font-weight:500}
+.banner.ok{background:var(--okbg);color:var(--ok)}.banner.warn{background:var(--warnbg);color:var(--warn)}.banner.bad{background:var(--badbg);color:var(--bad)}
+label{display:block;font-size:12px;color:var(--mute);margin:10px 0 3px}
+input,select,textarea{width:100%;padding:11px;border:1px solid var(--line);border-radius:10px;font-size:16px;background:#fff;color:var(--ink)}
+button{font:inherit;border:0;border-radius:10px;padding:11px 14px;background:var(--pri);color:#fff;font-weight:600;cursor:pointer}
+button.ghost{background:#e8eeec;color:var(--ink)}button.danger{background:var(--badbg);color:var(--bad)}button.sm{padding:6px 10px;font-size:13px}
+button:disabled{opacity:.5}
+.full{width:100%;margin-top:14px}
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+nav{position:fixed;bottom:0;left:0;right:0;background:#fff;border-top:1px solid var(--line);display:flex;padding-bottom:env(safe-area-inset-bottom);z-index:6}
+nav button{flex:1;background:none;color:var(--mute);border-radius:0;padding:10px 0 9px;font-size:12px;font-weight:600}
+nav button.on{color:var(--pri)}nav button span{display:block;font-size:20px}
+.chips{display:flex;gap:6px;overflow-x:auto;margin-bottom:10px}
+.chip{padding:6px 12px;border-radius:99px;background:#e8eeec;color:var(--ink);font-size:13px;white-space:nowrap}
+.chip.on{background:var(--pri);color:#fff}
+.item{display:flex;justify-content:space-between;gap:8px;padding:10px 0;border-bottom:1px solid var(--line)}
+.item:last-child{border-bottom:0}
+.tag{display:inline-block;font-size:11px;padding:1px 7px;border-radius:99px;background:#e8eeec;margin-left:4px}
+.tag.od{background:var(--badbg);color:var(--bad)}
+.acts{display:flex;gap:6px;margin-top:6px;flex-wrap:wrap}
+#toast{position:fixed;left:12px;right:12px;bottom:86px;background:#14201d;color:#fff;padding:12px 14px;border-radius:12px;display:none;z-index:9;text-align:center}
+table{width:100%;border-collapse:collapse}th,td{padding:7px 4px;text-align:right;border-bottom:1px solid var(--line)}th:first-child,td:first-child{text-align:left}th{font-size:12px;color:var(--mute);font-weight:600}
+</style>
+</head>
+<body>
+<header><div><b>💰 Pera Ko</b><br><small id="sync">...</small></div><button class="ghost sm" data-act="reload">↻ Refresh</button></header>
+<main id="app"></main>
+<nav id="nav">
+<button data-tab="home"><span>📊</span>Home</button>
+<button data-tab="log"><span>🧾</span>Araw-araw</button>
+<button data-tab="bills"><span>📅</span>Bayarin</button>
+<button data-tab="set"><span>⚙️</span>Settings</button>
+</nav>
+<div id="toast"></div>
+
+<script>
+// ====== ISANG BESES LANG: i-paste dito ang Apps Script URL (nagtatapos sa /exec) ======
+const API_URL='https://script.google.com/macros/s/AKfycbyqsMv_r7FbAmSJWvGhMFmHh177hiO2KS6onWPpFovH_HbmoizYhLB2bfHjetTDthIJfA/exec';
+const API_PIN='';   // kung may PIN sa Code.gs, ilagay din dito
+// =======================================================================================
+//#LOGIC-START
+const TYPES=['Supplier','Staff','Store','Personal'];
+const pad=n=>String(n).padStart(2,'0');
+function utc(s){const p=s.split('-').map(Number);return Date.UTC(p[0],p[1]-1,p[2]);}
+function addDays(s,n){return new Date(utc(s)+n*86400000).toISOString().slice(0,10);}
+function diffDays(a,b){return Math.round((utc(b)-utc(a))/86400000);}
+function addRepeat(s,r){
+  if(r==='weekly')return addDays(s,7);
+  if(r==='biweekly')return addDays(s,14);
+  if(r==='monthly'){
+    const p=s.split('-').map(Number);let y=p[0],m=p[1]+1;
+    if(m>12){m=1;y++;}
+    const last=new Date(Date.UTC(y,m,0)).getUTCDate();
+    return y+'-'+pad(m)+'-'+pad(Math.min(p[2],last));
+  }
+  return null;
+}
+function sum(a,f){return a.reduce((t,x)=>t+(+f(x)||0),0);}
+function calcWallets(st,log,pay,tr){
+  tr=tr||[];
+  const paid=pay.filter(p=>p.status==='Paid');
+  const pw=w=>sum(paid.filter(p=>(p.wallet==='GCash'?'GCash':'Cash')===w),p=>p.amount);
+  const tIn=w=>sum(tr.filter(x=>x.to===w),x=>x.amount),tOut=w=>sum(tr.filter(x=>x.from===w),x=>x.amount);
+  const cash=(+st.opening_cash||0)+sum(log,l=>l.sales)-sum(log,l=>l.gsales)+sum(log,l=>l.fee)+sum(log,l=>l.cashin)-sum(log,l=>l.cashout)
+    -(sum(log,l=>l.stock)-sum(log,l=>l.gstock))-(sum(log,l=>l.opex)-sum(log,l=>l.gopex))-pw('Cash')+tIn('Cash')-tOut('Cash');
+  const gcash=(+st.opening_gcash||0)+sum(log,l=>l.gsales)-sum(log,l=>l.cashin)+sum(log,l=>l.cashout)+sum(log,l=>l.cofee)-sum(log,l=>l.gstock)-sum(log,l=>l.gopex)-pw('GCash')+tIn('GCash')-tOut('GCash');
+  return{cash,gcash,total:cash+gcash};
+}
+function calcCash(st,log,pay,tr){return calcWallets(st,log,pay,tr).total;}
+function avgNet(log,today,N){
+  const start=addDays(today,-(N-1));
+  const rec=log.filter(l=>l.date>=start&&l.date<=today);
+  if(!rec.length)return 0;
+  const first=rec.reduce((m,l)=>l.date<m?l.date:m,rec[0].date);
+  return sum(rec,l=>(+l.sales)+(+l.fee||0)+(+l.cofee||0)-(+l.stock)-(+l.opex))/(diffDays(first,today)+1);
+}
+function forecast(st,log,pay,today,H,tr){
+  H=H||30;
+  const w=calcWallets(st,log,pay,tr),cash0=w.total,daily=avgNet(log,today,14),end=addDays(today,H),buffer=+st.buffer||0;
+  const events=[];
+  pay.filter(p=>p.status!=='Paid').forEach(p=>{
+    const mk=due=>({day:Math.max(0,diffDays(today,due)),amount:+p.amount,type:p.type,name:p.name,due,overdue:due<today});
+    if(p.due<=end)events.push(mk(p.due));
+    let due=p.repeat&&p.repeat!=='none'?addRepeat(p.due,p.repeat):null;
+    while(due&&due<=end){if(due>=today)events.push(mk(due));due=addRepeat(due,p.repeat);}
+  });
+  events.sort((a,b)=>a.day-b.day||a.due.localeCompare(b.due));
+  const series=[];let bal=cash0,min=Infinity,minDay=0,firstNeg=null;
+  for(let d=0;d<=H;d++){
+    if(d>0)bal+=daily;
+    bal-=sum(events.filter(e=>e.day===d),e=>e.amount);
+    series.push({day:d,date:addDays(today,d),bal});
+    if(bal<min){min=bal;minDay=d;}
+    if(bal<0&&!firstNeg)firstNeg={day:d,date:addDays(today,d),bal};
+  }
+  const due={},proj={};
+  [7,14,30].forEach(n=>{due[n]=sum(events.filter(e=>e.day<=n),e=>e.amount);proj[n]=series[Math.min(n,H)].bal;});
+  return{cash0,cash:w.cash,gcash:w.gcash,daily,series,min,minDay,minDate:addDays(today,minDay),firstNeg,due,proj,
+    safe:Math.max(0,Math.floor(min-buffer)),overdue:sum(events.filter(e=>e.overdue),e=>e.amount),events};
+}
+function monthSummary(st,log,pay,ym){
+  const L=log.filter(l=>String(l.date).startsWith(ym));
+  const paid=pay.filter(p=>p.status==='Paid'&&String(p.paidDate).startsWith(ym));
+  const by=t=>sum(paid.filter(p=>p.type===t),p=>p.amount);
+  const sales=sum(L,l=>l.sales),fee=sum(L,l=>(+l.fee||0)+(+l.cofee||0)),stock=sum(L,l=>l.stock),opex=sum(L,l=>l.opex);
+  const sup=by('Supplier'),staff=by('Staff'),store=by('Store'),pers=by('Personal');
+  const storeOut=stock+opex+sup+staff+store,storeNet=sales+fee-storeOut;
+  return{sales,fee,stock,opex,sup,staff,store,pers,storeOut,storeNet,totalNet:storeNet-pers,
+    estProfit:sales*((+st.margin_pct||0)/100)+fee-opex-staff-store};
+}
+//#LOGIC-END
+
+const $=s=>document.querySelector(s);
+const esc=s=>String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const peso=n=>{n=Math.round((+n||0)*100)/100;return(n<0?'-':'')+'₱'+Math.abs(n).toLocaleString('en-PH',{maximumFractionDigits:2});};
+const cls=n=>n<0?'neg':'pos';
+function todayStr(){const d=new Date();return d.getFullYear()+'-'+pad(d.getMonth()+1)+'-'+pad(d.getDate());}
+function dlabel(s){return new Date(utc(s)).toLocaleDateString('en-PH',{month:'short',day:'numeric',timeZone:'UTC'});}
+function ld(k,d){try{return JSON.parse(localStorage.getItem(k))||d;}catch(e){return d;}}
+
+let cfg=API_URL?{url:API_URL,pin:API_PIN}:ld('pk_cfg',{url:'',pin:''});
+let S=ld('pk_cache',{settings:{},log:[],pay:[],transfers:[]});
+S.transfers=S.transfers||[];
+let ui={tab:'home',filter:'all',form:false,edit:null,busy:false};
+
+function toast(m){const t=$('#toast');t.textContent=m;t.style.display='block';clearTimeout(toast.t);toast.t=setTimeout(()=>t.style.display='none',2800);}
+
+async function api(body){
+  if(!cfg.url)throw new Error('Ilagay muna ang Apps Script URL sa Settings');
+  const r=await fetch(cfg.url,{method:'POST',headers:{'Content-Type':'text/plain;charset=utf-8'},body:JSON.stringify(Object.assign({pin:cfg.pin},body))});
+  const j=await r.json();
+  if(!j.ok)throw new Error(j.error||'May error');
+  S={settings:j.settings,log:j.log,pay:j.pay,transfers:j.transfers||[]};
+  localStorage.setItem('pk_cache',JSON.stringify(S));
+  $('#sync').textContent='Synced '+new Date().toLocaleTimeString('en-PH',{hour:'2-digit',minute:'2-digit'});
+  return j;
+}
+async function run(body,okMsg){
+  if(ui.busy)return false;
+  ui.busy=true;
+  try{await api(body);if(okMsg)toast(okMsg);return true;}
+  catch(e){toast('⚠️ '+e.message);return false;}
+  finally{ui.busy=false;render();}
+}
+async function reload(){
+  if(!cfg.url){$('#sync').textContent='Walang URL pa';render();return;}
+  $('#sync').textContent='Naglo-load...';
+  try{await api({action:'getAll'});}catch(e){$('#sync').textContent='Offline (lumang data)';toast('⚠️ '+e.message);}
+  render();
+}
+
+function spark(series){
+  const W=320,H=70,v=series.map(s=>s.bal);
+  let mn=Math.min(0,...v),mx=Math.max(0,...v);if(mx===mn)mx=mn+1;
+  const y=n=>H-3-(n-mn)/(mx-mn)*(H-6),x=i=>i/(series.length-1)*W;
+  const pts=series.map((s,i)=>x(i).toFixed(1)+','+y(s.bal).toFixed(1)).join(' ');
+  return `<svg viewBox="0 0 ${W} ${H}" width="100%" height="70"><line x1="0" x2="${W}" y1="${y(0)}" y2="${y(0)}" stroke="#b91c1c" stroke-dasharray="4 3" stroke-width="1"/><polyline points="${pts}" fill="none" stroke="#0f766e" stroke-width="2.5" stroke-linejoin="round"/></svg>`;
+}
+
+function renderHome(){
+  const t=todayStr(),f=forecast(S.settings,S.log,S.pay,t,30,S.transfers),m=monthSummary(S.settings,S.log,S.pay,t.slice(0,7));
+  const buf=+S.settings.buffer||0;
+  let b='ok',msg='Okay ang pera mo sa susunod na 30 araw 👍';
+  if(f.firstNeg){b='bad';msg=`⚠️ Kukulangin ka sa <b>${dlabel(f.firstNeg.date)}</b> (${peso(f.firstNeg.bal)}). Kailangan mo pa ng <b>${peso(buf-f.min)}</b> para safe.`;}
+  else if(f.min<buf){b='warn';msg=`Manipis ang pera sa <b>${dlabel(f.minDate)}</b> (${peso(f.min)}), mas mababa sa buffer mo na ${peso(buf)}.`;}
+  const recent=S.log.some(l=>l.date>=addDays(t,-14));
+  const notes=[];
+  if(!recent)notes.push('Mag-log muna ng ilang araw para tumpak ang forecast.');
+  else if(f.daily<0)notes.push(`Cash lang: lugi ka ng ${peso(-f.daily)} kada araw sa average (mas malaki ang labas kesa pasok).`);
+  if(f.gcash<0)notes.push('Negative ang GCash mo: may kulang sa log (cash-in/out o paglipat) o kulang ang panimulang GCash.');
+  if(f.cash<0)notes.push('Negative ang Cash mo: may kulang sa log o sa panimulang cash.');
+  if(f.overdue>0)notes.push(`May lampas na due: ${peso(f.overdue)}.`);
+  const up=f.events.slice(0,6).map(e=>`<div class="item"><div>${esc(e.name)}<span class="tag ${e.overdue?'od':''}">${e.overdue?'LAMPAS':esc(e.type)}</span><div class="sm mute">${dlabel(e.due)}${e.day>0?' · '+e.day+' araw':''}</div></div><b>${peso(e.amount)}</b></div>`).join('')||'<div class="mute">Walang nakabinbing bayarin.</div>';
+  let verdict='';
+  if(m.sales>0){
+    if(m.storeNet<0)verdict='Mas malaki ang labas kesa pasok sa mismong store ngayong buwan.';
+    else if(m.totalNet<0)verdict='Kumikita/pantay ang store, pero nauubos sa personal na gastos.';
+    else verdict='Positibo ang store at ang kabuuan ngayong buwan 👍';
+  }
+  return `<div class="card"><h3>Kabuuang pera (Cash + GCash)</h3><div class="big ${cls(f.cash0)}">${peso(f.cash0)}</div>
+<div class="grid2" style="margin:8px 0"><div class="card" style="margin:0;padding:10px;background:#f3f5f4"><div class="sm mute">💵 Cash</div><b class="${cls(f.cash)}">${peso(f.cash)}</b></div><div class="card" style="margin:0;padding:10px;background:#f3f5f4"><div class="sm mute">📱 GCash</div><b class="${cls(f.gcash)}">${peso(f.gcash)}</b></div></div>
+<div class="sm mute">Pwede mong kunin (personal) bukod sa nakalistang bayarin: <b>${peso(f.safe)}</b></div></div>
+<div class="banner ${b}">${msg}${notes.map(n=>`<div class="sm" style="font-weight:400;margin-top:4px">${n}</div>`).join('')}</div>
+<div class="card"><h3>Forecast 30 araw</h3>${spark(f.series)}
+<table><tr><th></th><th>7 araw</th><th>14 araw</th><th>30 araw</th></tr>
+<tr><td>Due</td><td>${peso(f.due[7])}</td><td>${peso(f.due[14])}</td><td>${peso(f.due[30])}</td></tr>
+<tr><td>Pera pagkatapos</td>${[7,14,30].map(n=>`<td class="${cls(f.proj[n])}"><b>${peso(f.proj[n])}</b></td>`).join('')}</tr></table>
+<div class="sm mute" style="margin-top:6px">Batay sa average mong pasok/labas (huling 14 araw): ${peso(f.daily)}/araw</div></div>
+<div class="card"><h3>Susunod na bayarin</h3>${up}</div>
+<div class="card"><h3>Ngayong buwan</h3>
+<div class="row"><span>Benta</span><b>${peso(m.sales)}</b></div>
+<div class="row"><span class="mute">Kita sa GCash cash-in/out (fees)</span><span>${peso(m.fee)}</span></div>
+<div class="row"><span class="mute">Labas store (stock + gastos + bayad supplier/staff/store)</span><span>${peso(m.storeOut)}</span></div>
+<div class="row"><span>Net ng store</span><b class="${cls(m.storeNet)}">${peso(m.storeNet)}</b></div>
+<div class="row"><span class="mute">Personal (nabayaran)</span><span>${peso(m.pers)}</span></div>
+<div class="row"><span>Net lahat</span><b class="${cls(m.totalNet)}">${peso(m.totalNet)}</b></div>
+<div class="row"><span>Tantyang tubo (${+S.settings.margin_pct||0}% margin)</span><b class="${cls(m.estProfit)}">${peso(m.estProfit)}</b></div>
+${verdict?`<div class="sm" style="margin-top:8px">${verdict}</div>`:''}</div>`;
+}
+
+function renderLog(){
+  const t=todayStr(),td=S.log.filter(l=>l.date===t);
+  const rec=S.log.slice().sort((a,b)=>b.date.localeCompare(a.date)).slice(0,15);
+  return `<div class="card"><h3>Ilagay ang araw-araw</h3>
+<form id="fLog"><label>Petsa</label><input type="date" name="date" value="${t}" required>
+<label>Benta (total ngayong araw)</label><input type="number" name="sales" inputmode="decimal" min="0" step="any" placeholder="0">
+<label>Sa Benta, magkano ang binayad via GCash? (walang charge)</label><input type="number" name="gsales" inputmode="decimal" min="0" step="any" placeholder="0">
+<label>Pambili ng stock (bayad agad, hindi utang)</label><input type="number" name="stock" inputmode="decimal" min="0" step="any" placeholder="0">
+<label>Sa stock, magkano ang binayad via GCash?</label><input type="number" name="gstock" inputmode="decimal" min="0" step="any" placeholder="0">
+<label>Ibang gastos (kuryente, pamasahe, atbp.)</label><input type="number" name="opex" inputmode="decimal" min="0" step="any" placeholder="0">
+<label>Sa gastos, magkano ang binayad via GCash?</label><input type="number" name="gopex" inputmode="decimal" min="0" step="any" placeholder="0">
+<label>GCash cash-in: halaga na na-send ko (customer nag-abot ng cash)</label><input type="number" name="cashin" inputmode="decimal" min="0" step="any" placeholder="0">
+<label>GCash cash-out: CASH na inabot ko sa customer</label><input type="number" name="cashout" inputmode="decimal" min="0" step="any" placeholder="0">
+<label>Fee sa cash-in (cash na pumasok sa akin)</label><input type="number" name="fee" inputmode="decimal" min="0" step="any" placeholder="0">
+<label>Fee sa cash-out (kahit ibawas sa inabot o isinama sa send ng customer)</label><input type="number" name="cofee" inputmode="decimal" min="0" step="any" placeholder="0">
+<div class="sm mute" style="margin-top:6px">Cash-out: ang pumapasok sa GCash mo = cash na inabot + fee, sa alinmang paraan.</div>
+<label>Note (optional)</label><input name="notes" maxlength="200">
+<button class="full" ${ui.busy?'disabled':''}>Save</button></form>
+${td.length?`<div class="sm mute" style="margin-top:8px">Today may ${td.length} entry na (benta ${peso(sum(td,l=>l.sales))}). Idadagdag ang bago dito.</div>`:''}</div>
+<div class="card"><h3>Lipat pera (Cash ↔ GCash)</h3>
+<form id="fTr"><div class="grid2"><div><label>Mula sa</label><select name="from"><option>Cash</option><option>GCash</option></select></div><div><label>Papunta sa</label><select name="to"><option>GCash</option><option>Cash</option></select></div></div>
+<label>Halaga</label><input type="number" name="amount" inputmode="decimal" min="0" step="any" required>
+<button class="full">Ilipat</button></form>
+${S.transfers.slice().sort((a,b)=>b.date.localeCompare(a.date)).slice(0,5).map(x=>`<div class="item"><div class="sm">${dlabel(x.date)} · ${esc(x.from)} → ${esc(x.to)} · <b>${peso(x.amount)}</b></div><button class="danger sm" data-act="deltr" data-id="${esc(x.id)}">✕</button></div>`).join('')}</div>
+<div class="card"><h3>Huling entries</h3>${rec.map(l=>`<div class="item"><div><b>${dlabel(l.date)}</b> <span class="sm mute">${esc(l.notes)}</span><div class="sm">Benta ${peso(l.sales)} · Stock ${peso(l.stock)} · Gastos ${peso(l.opex)}</div>${l.cashin||l.cashout||l.fee||l.cofee?`<div class="sm mute">GCash in ${peso(l.cashin)} · out ${peso(l.cashout)} · fee ${peso((+l.fee||0)+(+l.cofee||0))}</div>`:''}${l.gsales?`<div class="sm mute">Benta via GCash ${peso(l.gsales)}</div>`:''}${l.gstock||l.gopex?`<div class="sm mute">Binayad via GCash: stock ${peso(l.gstock)} · gastos ${peso(l.gopex)}</div>`:''}</div><button class="danger sm" data-act="dellog" data-id="${esc(l.id)}">✕</button></div>`).join('')||'<div class="mute">Wala pa.</div>'}</div>`;
+}
+
+function renderBills(){
+  const t=todayStr(),F=ui.filter;
+  const open=S.pay.filter(p=>p.status!=='Paid'&&(F==='all'||p.type===F)).sort((a,b)=>a.due.localeCompare(b.due));
+  const paid=S.pay.filter(p=>p.status==='Paid').sort((a,b)=>String(b.paidDate).localeCompare(String(a.paidDate))).slice(0,10);
+  const e=ui.edit?S.pay.find(p=>p.id===ui.edit):null;
+  const v=e||{type:'Supplier',name:'',amount:'',due:addDays(t,7),repeat:'none',notes:''};
+  const opt=(a,sel)=>a.map(x=>`<option ${x[0]===sel?'selected':''} value="${x[0]}">${x[1]}</option>`).join('');
+  const form=ui.form?`<div class="card"><h3>${e?'I-edit':'Bagong'} bayarin</h3><form id="fBill">
+<label>Uri</label><select name="type">${opt([['Supplier','Supplier (utang sa paninda)'],['Staff','Sweldo ng tauhan'],['Store','Gastos ng store (renta, kuryente)'],['Personal','Personal (car loan, Meralco, Shopee)']],v.type)}</select>
+<label>Pangalan</label><input name="name" value="${esc(v.name)}" required maxlength="80" placeholder="hal. Coca-Cola, Car loan">
+<label>Halaga</label><input type="number" name="amount" inputmode="decimal" min="0" step="any" value="${esc(v.amount)}" required>
+${e?'':`<div class="grid2"><div><label>Petsa ng resibo</label><input type="date" name="receipt" value="${t}"></div><div><label>Terms</label><select name="terms">${opt([['0','Manual'],['7','7 araw'],['14','14 araw'],['30','30 araw']],'7')}</select></div></div>`}
+<label>Due date</label><input type="date" name="due" value="${v.due}" required>
+<label>Umuulit?</label><select name="repeat">${opt([['none','Hindi'],['weekly','Kada linggo'],['biweekly','Kada 2 linggo'],['monthly','Kada buwan']],v.repeat||'none')}</select>
+<label>Note</label><input name="notes" maxlength="200" value="${esc(v.notes)}">
+<div class="grid2"><button class="full">Save</button><button type="button" class="ghost full" data-act="cancel">Kansel</button></div></form></div>`:'';
+  const chips=[['all','Lahat'],...TYPES.map(x=>[x,x])].map(c=>`<button class="chip ${F===c[0]?'on':''}" data-act="filter" data-v="${c[0]}">${c[1]}</button>`).join('');
+  const list=open.map(p=>{
+    const d=diffDays(t,p.due),od=d<0;
+    return `<div class="item"><div><b>${esc(p.name)}</b><span class="tag">${esc(p.type)}</span>${p.repeat&&p.repeat!=='none'?'<span class="tag">↻ '+esc(p.repeat)+'</span>':''}
+<div class="sm ${od?'neg':'mute'}">${od?'LAMPAS '+(-d)+' araw · ':d===0?'Due ngayon · ':'Due '+d+' araw · '}${dlabel(p.due)}</div>
+<div class="acts"><button class="sm" data-act="pay" data-w="Cash" data-id="${esc(p.id)}">✓ Bayad (Cash)</button><button class="sm" data-act="pay" data-w="GCash" data-id="${esc(p.id)}">✓ Bayad (GCash)</button><button class="ghost sm" data-act="edit" data-id="${esc(p.id)}">Edit</button><button class="danger sm" data-act="delbill" data-id="${esc(p.id)}">✕</button></div></div>
+<b>${peso(p.amount)}</b></div>`;}).join('')||'<div class="mute">Walang bayarin 🎉</div>';
+  return `${form}<div class="card"><button class="full" style="margin:0" data-act="newbill">+ Dagdag na bayarin</button></div>
+<div class="chips">${chips}</div><div class="card"><h3>Hindi pa bayad (${open.length}) · ${peso(sum(open,p=>p.amount))}</h3>${list}</div>
+<div class="card"><h3>Nabayaran na (huli)</h3>${paid.map(p=>`<div class="row"><span>${esc(p.name)} <span class="sm mute">${dlabel(p.paidDate)}</span></span><span>${peso(p.amount)}</span></div>`).join('')||'<div class="mute">Wala pa.</div>'}</div>`;
+}
+
+function renderSet(){
+  const s=S.settings;
+  const conn=API_URL?'':`<div class="card"><h3>Koneksyon</h3><div class="sm mute">Tip: i-paste ang URL sa taas ng index.html (API_URL) para hindi na ito hinihingi.</div><form id="fCfg">
+<label>Apps Script Web App URL</label><input name="url" value="${esc(cfg.url)}" placeholder="https://script.google.com/macros/s/.../exec">
+<label>PIN (kung nilagay mo sa Code.gs)</label><input name="pin" value="${esc(cfg.pin)}" type="password" autocomplete="off">
+<button class="full">I-save at i-test</button></form></div>`;
+  return conn+`<div class="card"><h3>Pera</h3><form id="fSet">
+<label>Panimulang CASH (cash na hawak mo nung nagsimula ka mag-log)</label><input type="number" name="opening_cash" inputmode="decimal" step="any" value="${+s.opening_cash||0}">
+<label>Panimulang GCASH (balance ng GCash wallet mo nung nagsimula ka mag-log)</label><input type="number" name="opening_gcash" inputmode="decimal" step="any" value="${+s.opening_gcash||0}">
+<label>Tantyang margin ng tubo sa benta (%)</label><input type="number" name="margin_pct" inputmode="decimal" step="any" value="${+s.margin_pct||0}">
+<label>Buffer (pinakamababang pera na gusto mong laging may natitira)</label><input type="number" name="buffer" inputmode="decimal" step="any" value="${+s.buffer||0}">
+<button class="full">I-save</button></form></div>`;
+}
+
+function render(){
+  document.querySelectorAll('#nav button').forEach(b=>b.classList.toggle('on',b.dataset.tab===ui.tab));
+  const y=window.scrollY;
+  $('#app').innerHTML=ui.tab==='home'?renderHome():ui.tab==='log'?renderLog():ui.tab==='bills'?renderBills():renderSet();
+  window.scrollTo(0,y);
+}
+
+document.addEventListener('click',async ev=>{
+  const tb=ev.target.closest('[data-tab]');
+  if(tb){ui.tab=tb.dataset.tab;ui.form=false;ui.edit=null;render();window.scrollTo(0,0);return;}
+  const el=ev.target.closest('[data-act]');if(!el)return;
+  const a=el.dataset.act,id=el.dataset.id;
+  if(a==='reload')return reload();
+  if(a==='filter'){ui.filter=el.dataset.v;return render();}
+  if(a==='newbill'){ui.form=true;ui.edit=null;render();window.scrollTo(0,0);return;}
+  if(a==='cancel'){ui.form=false;ui.edit=null;return render();}
+  if(a==='edit'){ui.form=true;ui.edit=id;render();window.scrollTo(0,0);return;}
+  if(a==='pay'){const w=el.dataset.w||'Cash';if(confirm('Bayad na ba ito? Ibabawas sa '+w+' mo.'))await run({action:'pay',id,date:todayStr(),wallet:w},'Nabayaran na ✓');return;}
+  if(a==='deltr'){if(confirm('Burahin ang paglipat?'))await run({action:'delTransfer',id},'Binura');return;}
+  if(a==='delbill'){if(confirm('Burahin ang bayarin na ito?'))await run({action:'delPayable',id},'Binura');return;}
+  if(a==='dellog'){if(confirm('Burahin ang entry?'))await run({action:'delLog',id},'Binura');return;}
+});
+
+document.addEventListener('input',ev=>{
+  const f=ev.target.form;
+  if(!f||f.id!=='fBill'||!f.elements.terms)return;
+  if(ev.target.name==='receipt'||ev.target.name==='terms'){
+    const n=+f.elements.terms.value;
+    if(n&&f.elements.receipt.value)f.elements.due.value=addDays(f.elements.receipt.value,n);
+  }
+});
+
+document.addEventListener('submit',async ev=>{
+  ev.preventDefault();
+  const f=ev.target,d=Object.fromEntries(new FormData(f));
+  if(f.id==='fLog'){
+    if(await run({action:'addLog',date:d.date,sales:d.sales,stock:d.stock,opex:d.opex,cashin:d.cashin,cashout:d.cashout,fee:d.fee,cofee:d.cofee,gsales:d.gsales,gstock:d.gstock,gopex:d.gopex,notes:d.notes},'Na-save ✓'))ui.tab='home',render();
+  }else if(f.id==='fTr'){
+    await run({action:'addTransfer',date:todayStr(),from:d.from,to:d.to,amount:d.amount},'Nailipat ✓');
+  }else if(f.id==='fBill'){
+    const ok=await run({action:'savePayable',id:ui.edit||undefined,type:d.type,name:d.name,amount:d.amount,due:d.due,repeat:d.repeat,notes:d.notes},'Na-save ✓');
+    if(ok){ui.form=false;ui.edit=null;render();}
+  }else if(f.id==='fSet'){
+    await run({action:'saveSettings',settings:{opening_cash:d.opening_cash,opening_gcash:d.opening_gcash,margin_pct:d.margin_pct,buffer:d.buffer}},'Na-save ✓');
+  }else if(f.id==='fCfg'){
+    cfg={url:d.url.trim(),pin:d.pin.trim()};
+    localStorage.setItem('pk_cfg',JSON.stringify(cfg));
+    if(await run({action:'getAll'},'Konektado ✓'))ui.tab='home',render();
+  }
+});
+
+if(!cfg.url)ui.tab='set';
+render();
+if(cfg.url)reload();
+</script>
+</body>
+</html>
