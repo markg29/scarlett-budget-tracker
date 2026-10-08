@@ -90,6 +90,8 @@ table{width:100%;border-collapse:collapse}th,td{padding:8px 4px;text-align:right
 .paybox{background:var(--soft);border-radius:14px;padding:10px 12px;margin-top:8px}.paybox .acts{margin-top:6px}
 .tile[data-act=bd]{cursor:pointer}.bdbox{background:var(--soft);border-radius:16px;padding:12px 14px;margin:0 0 12px}.bdbox>b{font:600 15px var(--disp);color:var(--fur-d)}.bdbox .row{padding:5px 0;font-size:14px}
 .row.sub2{padding:3px 0 3px 14px;font-size:13.5px;border-bottom:0}
+main,.card,.bubble{overflow-wrap:anywhere;word-break:break-word}.item>div,.ent>div,.row>span{min-width:0}.big{overflow-wrap:anywhere}
+.ent>div:first-child{flex:1;min-width:0}.ent>.ent-r{flex:0 0 auto;min-width:auto}
 </style>
 </head>
 <body>
@@ -128,7 +130,8 @@ function addRepeat(s,r){
   }
   return null;
 }
-function sum(a,f){return a.reduce((t,x)=>t+(+f(x)||0),0);}
+function r2(n){return Math.round((+n||0)*100)/100;}
+function sum(a,f){return r2(a.reduce((t,x)=>t+(+f(x)||0),0));}
 function calcWallets(st,log,pay,tr){
   tr=tr||[];
   const paid=pay.filter(p=>p.status==='Paid');
@@ -140,7 +143,8 @@ function calcWallets(st,log,pay,tr){
   const personal=(+st.opening_personal||0)+tIn('Personal')-tOut('Personal')-pw('Personal');
   const barya=(+st.opening_barya||0)+tIn('Barya')-tOut('Barya')-pw('Barya');
   const drawer=(+st.opening_drawer||0)+sum(log,l=>l.cashin)+sum(log,l=>l.fee)+sum(log,l=>l.loadsale)+tIn('Drawer')-tOut('Drawer')-pw('Drawer');
-  return{cash,gcash,drawer,personal,barya,total:cash+gcash+drawer+personal+barya};
+  const R={cash:r2(cash),gcash:r2(gcash),drawer:r2(drawer),personal:r2(personal),barya:r2(barya)};
+  return{cash:R.cash,gcash:R.gcash,drawer:R.drawer,personal:R.personal,barya:R.barya,total:r2(R.cash+R.gcash+R.drawer+R.personal+R.barya)};
 }
 function breakdown(st,log,pay,tr,which){
   tr=tr||[];
@@ -180,16 +184,16 @@ function forecast(st,log,pay,today,H,tr){
   const w=calcWallets(st,log,pay,tr),cash0=w.total,daily=avgNet(log,today,14),end=addDays(today,H),buffer=+st.buffer||0;
   const events=[];
   pay.filter(p=>p.status!=='Paid').forEach(p=>{
-    const mk=due=>({day:Math.max(0,diffDays(today,due)),amount:+p.amount,type:p.type,name:p.name,due,overdue:due<today});
+    const mk=(due,rec)=>({day:Math.max(0,diffDays(today,due)),amount:rec?(+p.baseAmount||+p.amount):+p.amount,type:p.type,name:p.name,due,overdue:due<today});
     if(p.due<=end)events.push(mk(p.due));
     let due=p.repeat&&p.repeat!=='none'?addRepeat(p.due,p.repeat):null;
-    while(due&&due<=end){if(due>=today)events.push(mk(due));due=addRepeat(due,p.repeat);}
+    while(due&&due<=end){if(due>=today)events.push(mk(due,true));due=addRepeat(due,p.repeat);}
   });
   events.sort((a,b)=>a.day-b.day||a.due.localeCompare(b.due));
   const series=[];let bal=cash0,min=Infinity,minDay=0,firstNeg=null;
   for(let d=0;d<=H;d++){
     if(d>0)bal+=daily;
-    bal-=sum(events.filter(e=>e.day===d),e=>e.amount);
+    bal=r2(bal-sum(events.filter(e=>e.day===d),e=>e.amount));
     series.push({day:d,date:addDays(today,d),bal});
     if(bal<min){min=bal;minDay=d;}
     if(bal<0&&!firstNeg)firstNeg={day:d,date:addDays(today,d),bal};
@@ -257,16 +261,21 @@ async function api(body){
 async function run(body,okMsg){
   if(ui.busy)return false;
   ui.busy=true;showBusy(true,BUSYMSG[body.action]||'Sandali...');
+  let rerender=true;
   try{await api(body);if(okMsg)toast(okMsg,'ok');return true;}
   catch(e){
     if(e.net&&body.action!=='getAll'){
       showBusy(true,'Chine-check kung na-save...');
       try{await api({action:'getAll'});toast('⚠️ Mahina ang net. Na-refresh ang data: tingnan kung nandoon na bago ulitin.','err');}
       catch(_){toast('⚠️ Walang makuhang sagot. Huwag munang ulitin, i-refresh mamaya at tingnan kung na-save.','err');}
-    }else toast('⚠️ '+e.message+' (hindi na-save)','err');
+    }else{
+      toast('⚠️ '+e.message+' (hindi na-save)','err');
+      if(/Bayad na ito|Hindi nahanap/.test(e.message)){try{await api({action:'getAll'});}catch(_){}} // lumang data sa screen: i-refresh
+      else rerender=false; // kulang/maling input: huwag burahin ang tinype
+    }
     return false;
   }
-  finally{ui.busy=false;showBusy(false);render();}
+  finally{ui.busy=false;showBusy(false);if(rerender)render();}
 }
 async function reload(){
   if(!cfg.url){$('#sync').textContent='Walang URL pa';render();return;}
@@ -315,7 +324,7 @@ function renderHome(){
   else if(f.min<buf){b='warn';msg=`Manipis ang pera sa <b>${dlabel(f.minDate)}</b> (${peso(f.min)}), mas mababa sa buffer mo na ${peso(buf)}.`;}
   const recent=S.log.some(l=>l.date>=addDays(t,-14));
   const notes=[];
-  if(f.lowData)notes.push('Kulang pa ang benta log para sa average kada araw (kailangan ng 3+ araw na may benta sa huling 14 araw). Sa ngayon, pera mo at mga bayarin lang ang binibilang sa forecast, walang kasamang papasok na benta.');
+  if(f.lowData)notes.push('Kulang pa ang benta log (kailangan ng 3+ araw). Pera mo at bayarin lang ang binibilang sa forecast, walang papasok na benta.');
   else if(f.daily<0)notes.push(`Cash lang: lugi ka ng ${peso(-f.daily)} kada araw sa average (mas malaki ang labas kesa pasok).`);
   if(f.gcash<0)notes.push('Negative ang GCash mo: may kulang sa log (cash-in/out o paglipat) o kulang ang panimulang GCash.');
   if(f.personal<0)notes.push('Negative ang Personal mo: may kulang na lipat pera o panimulang personal.');
@@ -324,8 +333,10 @@ function renderHome(){
   if(f.cash<0)notes.push('Negative ang Cash mo: may kulang sa log o sa panimulang cash.');
   if(f.overdue>0)notes.push(`May lampas na due: ${peso(f.overdue)}.`);
   if(f.overdue>0&&b==='ok'){b='warn';msg='May lampas na due na bayarin.';}
-  const nx=f.events[0];
-  if(nx&&!nx.overdue&&nx.day<=1)notes.push(`${nx.day===0?'Ngayon':'Bukas'} ang due: ${esc(nx.name)} ${peso(nx.amount)}.`);
+  [[0,'Ngayon'],[1,'Bukas']].forEach(([dd,lab])=>{
+    const ev=f.events.filter(e=>!e.overdue&&e.day===dd);
+    if(ev.length)notes.push(`${lab} ang due: ${ev.map(e=>esc(e.name)+' '+peso(e.amount)).join(', ')}${ev.length>1?' (kabuuan '+peso(sum(ev,e=>e.amount))+')':''}.`);
+  });
   if(!S.log.some(l=>l.date===t&&+l.sales>0))notes.push('Wala ka pang benta na nalog ngayong araw. Ilagay na sa Transaksyon 🛒');
   const hr=new Date().getHours(),part=hr<12?'umaga':hr<18?'hapon':'gabi';
   const hello=`<div class="hello"><small>${new Date().toLocaleDateString('en-US',{weekday:'long',month:'long',day:'numeric'})}</small><h2>Magandang ${part}, ${esc(USER_NAME)}!</h2></div>`;
@@ -442,7 +453,7 @@ function renderBills(){
   const t=todayStr(),F=ui.filter;
   const open=S.pay.filter(p=>p.status!=='Paid'&&(F==='all'||p.type===F)).sort((a,b)=>a.due.localeCompare(b.due));
   const paid=S.pay.filter(p=>p.status==='Paid').sort((a,b)=>String(b.paidDate).localeCompare(String(a.paidDate))).slice(0,10);
-  const e=ui.edit?S.pay.find(p=>p.id===ui.edit):null;
+  const e=ui.edit?S.pay.find(p=>p.id===ui.edit&&p.status!=='Paid'):null;
   const v=e||{type:'Supplier',name:'',amount:'',due:addDays(t,7),repeat:'none',notes:''};
   const opt=(a,sel)=>a.map(x=>`<option ${x[0]===sel?'selected':''} value="${x[0]}">${x[1]}</option>`).join('');
   const form=ui.form?`<div class="card"><h3>${e?'I-edit':'Bagong'} bayarin</h3><form id="fBill">
@@ -450,7 +461,7 @@ function renderBills(){
 <label>Pangalan</label><input name="name" value="${esc(v.name)}" required maxlength="80" placeholder="hal. Coca-Cola, Car loan">
 <label>Halaga</label><input type="number" name="amount" inputmode="decimal" min="0" step="any" value="${esc(v.amount)}" required>
 ${e?'':`<div class="grid2"><div><label>Petsa ng resibo</label><input type="date" name="receipt" value="${t}"></div><div><label>Terms</label><select name="terms">${opt([['0','Manual'],['7','7 araw'],['14','14 araw'],['30','30 araw']],'7')}</select></div></div>`}
-<label>Due date</label><input type="date" name="due" value="${v.due}" required>
+<label>Due date</label><input type="date" name="due" value="${esc(v.due)}" required>
 ${e?'':`<label>Bayad na ba ngayon?</label><select name="paynow">${opt([['','Hindi pa, i-lista lang'],['Cash','Oo, bayad na ngayon sa Cash'],['GCash','Oo, bayad na ngayon sa GCash'],['Personal','Oo, bayad na ngayon sa Personal']],'')}</select>`}
 <label>Umuulit?</label><select name="repeat">${opt([['none','Hindi'],['weekly','Kada linggo'],['biweekly','Kada 2 linggo'],['monthly','Kada buwan']],v.repeat||'none')}</select>
 <label>Note</label><input name="notes" maxlength="200" value="${esc(v.notes)}">
@@ -505,8 +516,8 @@ document.addEventListener('click',async ev=>{
   if(a==='logtype'){ui.logType=el.dataset.v;return render();}
   if(a==='filter'){ui.filter=el.dataset.v;return render();}
   if(a==='bd'){ui.bd=ui.bd===el.dataset.v?null:el.dataset.v;return render();}
-  if(a==='askpay'){ui.pay=id;ui.more=null;return render();}
-  if(a==='more'){ui.more=id;ui.pay=null;return render();}
+  if(a==='askpay'){ui.pay=id;ui.more=null;ui.form=false;ui.edit=null;return render();}
+  if(a==='more'){ui.more=id;ui.pay=null;ui.form=false;ui.edit=null;return render();}
   if(a==='closepay'){ui.pay=null;ui.more=null;return render();}
   if(a==='setedit'){ui.setEdit=true;render();window.scrollTo(0,0);return;}
   if(a==='setcancel'){ui.setEdit=false;return render();}
@@ -561,7 +572,7 @@ document.addEventListener('submit',async ev=>{
     const ch=keys.filter(k=>(+d[k]||0)!==(+S.settings[k]||0));
     if(!ch.length){ui.setEdit=false;return render();}
     if(!confirm('I-save ang pagbabago?\n\n'+ch.map(k=>lab[k]+': '+(+S.settings[k]||0)+' → '+(+d[k]||0)).join('\n')))return;
-    if(await run({action:'saveSettings',settings:{opening_cash:d.opening_cash,opening_gcash:d.opening_gcash,opening_drawer:d.opening_drawer,opening_personal:d.opening_personal,opening_barya:d.opening_barya,margin_pct:d.margin_pct,buffer:d.buffer}},'Na-save ✓')){ui.setEdit=false;render();}
+    if(await run({action:'saveSettings',settings:Object.fromEntries(ch.map(k=>[k,d[k]]))},'Na-save ✓')){ui.setEdit=false;render();}
   }else if(f.id==='fCfg'){
     cfg={url:d.url.trim(),pin:d.pin.trim()};
     localStorage.setItem('pk_cfg',JSON.stringify(cfg));
