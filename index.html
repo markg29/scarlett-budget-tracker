@@ -219,11 +219,11 @@ function ld(k,d){try{return JSON.parse(localStorage.getItem(k))||d;}catch(e){ret
 let cfg=API_URL?{url:API_URL,pin:API_PIN}:ld('pk_cfg',{url:'',pin:''});
 let S=ld('pk_cache',{settings:{},log:[],pay:[],transfers:[]});
 S.transfers=S.transfers||[];
-let ui={bd:null,pay:null,more:null,setEdit:false,tab:'home',filter:'all',form:false,edit:null,busy:false,logType:'benta'};
+let ui={editLog:null,bd:null,pay:null,more:null,setEdit:false,tab:'home',filter:'all',form:false,edit:null,busy:false,logType:'benta'};
 
 function toast(m,kind){const t=$('#toast');t.textContent=m;t.className=kind||'';t.style.display='block';clearTimeout(toast.t);toast.t=setTimeout(()=>t.style.display='none',kind==='err'?6000:3000);
   try{if(navigator.vibrate)navigator.vibrate(kind==='err'?[60,40,60]:30);}catch(e){}}
-const BUSYMSG={addLog:'Sine-save...',savePayable:'Sine-save...',saveSettings:'Sine-save...',addTransfer:'Inililipat...',pay:'Binabayaran...',delLog:'Binubura...',delPayable:'Binubura...',delTransfer:'Binubura...',getAll:'Kumokonekta...'};
+const BUSYMSG={addLog:'Sine-save...',editLog:'Sine-save...',savePayable:'Sine-save...',saveSettings:'Sine-save...',addTransfer:'Inililipat...',pay:'Binabayaran...',delLog:'Binubura...',delPayable:'Binubura...',delTransfer:'Binubura...',getAll:'Kumokonekta...'};
 function showBusy(on,msg){const b=$('#busy');b.style.display=on?'flex':'none';if(msg)$('#busyMsg').textContent=msg;}
 
 async function api(body){
@@ -379,10 +379,21 @@ function entriesCard(T){
   const groups=[];
   rows.forEach(r=>{let g=groups[groups.length-1];if(!g||g.d!==r.l.date){g={d:r.l.date,items:[],tot:0};groups.push(g);}g.items.push(r);g.tot+=r.i.amt;});
   const html=groups.map(g=>`<div class="dayh"><span>${dayLabel(g.d)}</span><b>${T==='gcash'?'Kita ':''}${peso(g.tot)}</b></div>`
-    +g.items.map(r=>`<div class="ent"><div><b>${esc(r.l.notes)||title}</b>${r.i.lines.map(x=>`<div class="sm mute">${x}</div>`).join('')}</div><div class="ent-r">${r.i.amt?`<b>${peso(r.i.amt)}</b>`:''}<button class="danger sm" data-act="dellog" data-id="${esc(r.l.id)}">✕</button></div></div>`).join('')).join('');
+    +g.items.map(r=>`<div class="ent"><div><b>${esc(r.l.notes)||title}</b>${r.i.lines.map(x=>`<div class="sm mute">${x}</div>`).join('')}</div><div class="ent-r">${r.i.amt?`<b>${peso(r.i.amt)}</b>`:''}<button class="ghost sm" data-act="editlog" data-id="${esc(r.l.id)}" aria-label="Edit">✏️</button><button class="danger sm" data-act="dellog" data-id="${esc(r.l.id)}">✕</button></div></div>`).join('')).join('');
   return `<div class="card"><h3>Huling ${title.toLowerCase()} entries</h3>${html||'<div class="mute">Wala pa.</div>'}</div>`;
 }
+function editLogCard(){
+  const l=S.log.find(x=>x.id===ui.editLog);if(!l)return '';
+  const n=(k,lab)=>`<label>${lab}</label><input type="number" name="${k}" inputmode="decimal" min="0" step="any" value="${+l[k]||''}" placeholder="0">`;
+  return `<div class="card"><h3>I-edit ang entry</h3><form id="fEditLog"><label>Petsa</label><input type="date" name="date" value="${esc(l.date)}" required>
+${n('sales','Total na benta (POS)')}${n('gsales','Binayad via GCash (kasama sa benta)')}
+<div class="sub">GCash</div>${n('cashin','Cash-in: halaga na na-send ko')}${n('fee','Cash-in fee')}${n('cashout','Cash-out: cash na inabot ko')}${n('cofee','Cash-out fee')}${n('loadsale','Load: cash na tinanggap')}${n('loadcost','Load: ibinawas sa GCash')}
+<div class="sub">Gastos ng store</div>${n('stock','Stock (bayad agad)')}${n('gstock','Doon, binayad via GCash')}${n('opex','Ibang gastos ng store')}${n('gopex','Doon, binayad via GCash')}
+<label>Note</label><input name="notes" maxlength="200" value="${esc(l.notes)}">
+<div class="grid2"><button class="full">I-save</button><button type="button" class="ghost full" data-act="canceleditlog">Kansel</button></div></form></div>`;
+}
 function renderLog(){
+  if(ui.editLog&&S.log.some(x=>x.id===ui.editLog))return editLogCard();
   const t=todayStr(),T=ui.logType,td=S.log.filter(l=>l.date===t);
   const seg=[['benta','🛒 Benta'],['gcash','📱 GCash'],['gastos','🧾 Gastos'],['lipat','🔁 Lipat']].map(x=>`<button type="button" class="${T===x[0]?'on':''}" data-act="logtype" data-v="${x[0]}">${x[1]}</button>`).join('');
   const today=`<div class="card"><h3>Ngayong araw</h3><div class="stat"><div><span class="sm mute">Benta</span><b>${peso(sum(td,l=>+l.sales||0))}</b></div><div><span class="sm mute">Gastos</span><b>${peso(sum(td,l=>(+l.stock)+(+l.opex)))}</b></div><div><span class="sm mute">Kita GCash</span><b>${peso(sum(td,gKita))}</b></div></div></div>`;
@@ -467,7 +478,7 @@ function render(){
 
 document.addEventListener('click',async ev=>{
   const tb=ev.target.closest('[data-tab]');
-  if(tb){ui.tab=tb.dataset.tab;ui.form=false;ui.edit=null;ui.pay=null;ui.more=null;ui.setEdit=false;render();window.scrollTo(0,0);return;}
+  if(tb){ui.tab=tb.dataset.tab;ui.form=false;ui.edit=null;ui.pay=null;ui.more=null;ui.setEdit=false;ui.editLog=null;render();window.scrollTo(0,0);return;}
   const el=ev.target.closest('[data-act]');if(!el)return;
   const a=el.dataset.act,id=el.dataset.id;
   if(a==='reload')return reload();
@@ -488,6 +499,8 @@ document.addEventListener('click',async ev=>{
     if(await run({action:'pay',id,date:todayStr(),wallet:w,amount:part?amt:undefined},part?'Hulog na-record ✓':'Nabayaran na ✓')){ui.pay=null;ui.more=null;render();}return;}
   if(a==='deltr'){if(confirm('Burahin ang paglipat?'))await run({action:'delTransfer',id},'Binura');return;}
   if(a==='delbill'){if(confirm('Burahin ang bayarin na ito?'))await run({action:'delPayable',id},'Binura');return;}
+  if(a==='editlog'){ui.editLog=id;render();window.scrollTo(0,0);return;}
+  if(a==='canceleditlog'){ui.editLog=null;return render();}
   if(a==='dellog'){if(confirm('Burahin ang entry?'))await run({action:'delLog',id},'Binura');return;}
 });
 
@@ -506,6 +519,9 @@ document.addEventListener('submit',async ev=>{
   if(f.id==='fLog'){
     if(+d.cashout&&d.feemode!=='extra'){const h=(+d.cashout)-(+d.cofee||0);if(h<0){toast('⚠️ Mas malaki ang fee kesa sa cash-out','err');return;}d.cashout=String(Math.round(h*100)/100);}
     if(await run({action:'addLog',date:d.date,sales:d.sales,stock:d.stock,opex:d.opex,cashin:d.cashin,cashout:d.cashout,fee:d.fee,cofee:d.cofee,gsales:d.gsales,loadsale:d.loadsale,loadcost:d.loadcost,gstock:d.gstock,gopex:d.gopex,notes:d.notes},'Na-save ✓'))render();
+  }else if(f.id==='fEditLog'){
+    const ok=await run({action:'editLog',id:ui.editLog,date:d.date,sales:d.sales,stock:d.stock,opex:d.opex,cashin:d.cashin,cashout:d.cashout,fee:d.fee,cofee:d.cofee,gsales:d.gsales,loadsale:d.loadsale,loadcost:d.loadcost,gstock:d.gstock,gopex:d.gopex,notes:d.notes},'Na-update ✓');
+    if(ok){ui.editLog=null;render();}
   }else if(f.id==='fPers'){
     const before=new Set(S.pay.map(p=>p.id));
     if(!(await run({action:'savePayable',type:'Personal',name:(d.name||'').trim()||'Personal na gastos',amount:d.amount,due:todayStr(),repeat:'none',notes:'Mabilis na gastos'})))return;
