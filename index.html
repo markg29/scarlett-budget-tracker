@@ -164,10 +164,14 @@ function breakdown(st,log,pay,tr,which){
 }
 function calcCash(st,log,pay,tr){return calcWallets(st,log,pay,tr).total;}
 function gKita(l){return(+l.fee||0)+(+l.cofee||0)+(+l.loadsale||0)-(+l.loadcost||0);}
+function salesDays(log,today,N){
+  const start=addDays(today,-(N-1));
+  return new Set(log.filter(l=>l.date>=start&&l.date<=today&&(+l.sales||0)>0).map(l=>l.date)).size;
+}
 function avgNet(log,today,N){
   const start=addDays(today,-(N-1));
   const rec=log.filter(l=>l.date>=start&&l.date<=today);
-  if(!rec.length)return 0;
+  if(!rec.length||salesDays(log,today,N)<3)return 0; // kulang pa ang data: huwag mag-extrapolate
   const first=rec.reduce((m,l)=>l.date<m?l.date:m,rec[0].date);
   return sum(rec,l=>(+l.sales||0)+gKita(l)-(+l.stock||0)-(+l.opex||0))/(diffDays(first,today)+1);
 }
@@ -192,7 +196,7 @@ function forecast(st,log,pay,today,H,tr){
   }
   const due={},proj={};
   [7,14,30].forEach(n=>{due[n]=sum(events.filter(e=>e.day<=n),e=>e.amount);proj[n]=series[Math.min(n,H)].bal;});
-  return{cash0,cash:w.cash,gcash:w.gcash,drawer:w.drawer,personal:w.personal,barya:w.barya,daily,series,min,minDay,minDate:addDays(today,minDay),firstNeg,due,proj,
+  return{lowData:salesDays(log,today,14)<3,cash0,cash:w.cash,gcash:w.gcash,drawer:w.drawer,personal:w.personal,barya:w.barya,daily,series,min,minDay,minDate:addDays(today,minDay),firstNeg,due,proj,
     safe:Math.max(0,Math.floor(min-buffer)),overdue:sum(events.filter(e=>e.overdue),e=>e.amount),events};
 }
 function monthSummary(st,log,pay,ym){
@@ -224,20 +228,29 @@ let ui={editLog:null,bd:null,pay:null,more:null,setEdit:false,tab:'home',filter:
 function toast(m,kind){const t=$('#toast');t.textContent=m;t.className=kind||'';t.style.display='block';clearTimeout(toast.t);toast.t=setTimeout(()=>t.style.display='none',kind==='err'?6000:3000);
   try{if(navigator.vibrate)navigator.vibrate(kind==='err'?[60,40,60]:30);}catch(e){}}
 const BUSYMSG={addLog:'Sine-save...',editLog:'Sine-save...',savePayable:'Sine-save...',saveSettings:'Sine-save...',addTransfer:'Inililipat...',pay:'Binabayaran...',delLog:'Binubura...',delPayable:'Binubura...',delTransfer:'Binubura...',getAll:'Kumokonekta...'};
-function showBusy(on,msg){const b=$('#busy');b.style.display=on?'flex':'none';if(msg)$('#busyMsg').textContent=msg;}
+let busyT=null;
+function showBusy(on,msg){
+  const b=$('#busy');b.style.display=on?'flex':'none';clearTimeout(busyT);
+  if(msg)$('#busyMsg').textContent=msg;
+  if(on)busyT=setTimeout(()=>{$('#busyMsg').textContent='Mabagal ang Google ngayon, sandali lang...';},7000);
+}
 
 async function api(body){
   if(!cfg.url)throw new Error('Ilagay muna ang Apps Script URL sa Settings');
-  const ac=typeof AbortController!=='undefined'?new AbortController():null,tm=setTimeout(()=>ac&&ac.abort(),30000);
-  let j;
-  try{
-    const r=await fetch(cfg.url,{method:'POST',headers:{'Content-Type':'text/plain;charset=utf-8'},body:JSON.stringify(Object.assign({pin:cfg.pin},body)),signal:ac?ac.signal:undefined});
-    j=await r.json();
-  }catch(e){throw new Error(e&&e.name==='AbortError'?'Walang sagot (mabagal ang net). Subukan ulit.':'Walang koneksyon. Subukan ulit.');}
-  finally{clearTimeout(tm);}
+  // may sariling ID ang bawat pag-save para ligtas i-retry (hindi madodoble sa server)
+  const payload=JSON.stringify(Object.assign({pin:cfg.pin},body,body.action==='getAll'?{}:{rid:'r'+Date.now().toString(36)+Math.random().toString(36).slice(2,8)}));
+  let j=null;
+  for(let t=0;t<2&&!j;t++){
+    const ac=typeof AbortController!=='undefined'?new AbortController():null,tm=setTimeout(()=>ac&&ac.abort(),45000);
+    try{
+      const r=await fetch(cfg.url,{method:'POST',headers:{'Content-Type':'text/plain;charset=utf-8'},body:payload,signal:ac?ac.signal:undefined});
+      j=await r.json();
+    }catch(e){if(t===1){const er=new Error('Mahina ang net o mabagal ang Google.');er.net=true;throw er;}await new Promise(r=>setTimeout(r,900));}
+    finally{clearTimeout(tm);}
+  }
   if(!j.ok)throw new Error(j.error||'May error');
   S={settings:j.settings,log:j.log,pay:j.pay,transfers:j.transfers||[]};
-  localStorage.setItem('pk_cache',JSON.stringify(S));
+  try{localStorage.setItem('pk_cache',JSON.stringify(S));}catch(_){}
   $('#sync').textContent='Synced '+new Date().toLocaleTimeString('en-PH',{hour:'2-digit',minute:'2-digit'});
   return j;
 }
@@ -245,7 +258,14 @@ async function run(body,okMsg){
   if(ui.busy)return false;
   ui.busy=true;showBusy(true,BUSYMSG[body.action]||'Sandali...');
   try{await api(body);if(okMsg)toast(okMsg,'ok');return true;}
-  catch(e){toast('⚠️ '+e.message+' (hindi na-save)','err');return false;}
+  catch(e){
+    if(e.net&&body.action!=='getAll'){
+      showBusy(true,'Chine-check kung na-save...');
+      try{await api({action:'getAll'});toast('⚠️ Mahina ang net. Na-refresh ang data: tingnan kung nandoon na bago ulitin.','err');}
+      catch(_){toast('⚠️ Walang makuhang sagot. Huwag munang ulitin, i-refresh mamaya at tingnan kung na-save.','err');}
+    }else toast('⚠️ '+e.message+' (hindi na-save)','err');
+    return false;
+  }
   finally{ui.busy=false;showBusy(false);render();}
 }
 async function reload(){
@@ -291,11 +311,11 @@ function renderHome(){
   const t=todayStr(),f=forecast(S.settings,S.log,S.pay,t,30,S.transfers),m=monthSummary(S.settings,S.log,S.pay,t.slice(0,7));
   const buf=+S.settings.buffer||0;
   let b='ok',msg='Okay ang pera mo sa susunod na 30 araw 👍';
-  if(f.firstNeg){b='bad';msg=`⚠️ Kukulangin ka sa <b>${dlabel(f.firstNeg.date)}</b> (${peso(f.firstNeg.bal)}). Kailangan mo pa ng <b>${peso(buf-f.min)}</b> para safe.`;}
+  if(f.firstNeg){b='bad';msg=`⚠️ Kukulangin ka sa <b>${dlabel(f.firstNeg.date)}</b> (${peso(f.firstNeg.bal)}). Kailangan mo pa ng <b>${peso(buf-f.min)}</b> para safe.${f.lowData?' <span class="mute">(Bayarin lang ang binilang, wala pang kita.)</span>':''}`;}
   else if(f.min<buf){b='warn';msg=`Manipis ang pera sa <b>${dlabel(f.minDate)}</b> (${peso(f.min)}), mas mababa sa buffer mo na ${peso(buf)}.`;}
   const recent=S.log.some(l=>l.date>=addDays(t,-14));
   const notes=[];
-  if(!recent)notes.push('Mag-log muna ng ilang araw para tumpak ang forecast.');
+  if(f.lowData)notes.push('Kulang pa ang benta log para sa average kada araw (kailangan ng 3+ araw na may benta sa huling 14 araw). Sa ngayon, pera mo at mga bayarin lang ang binibilang sa forecast, walang kasamang papasok na benta.');
   else if(f.daily<0)notes.push(`Cash lang: lugi ka ng ${peso(-f.daily)} kada araw sa average (mas malaki ang labas kesa pasok).`);
   if(f.gcash<0)notes.push('Negative ang GCash mo: may kulang sa log (cash-in/out o paglipat) o kulang ang panimulang GCash.');
   if(f.personal<0)notes.push('Negative ang Personal mo: may kulang na lipat pera o panimulang personal.');
@@ -326,7 +346,7 @@ ${ui.bd?`<div class="bdbox"><b>Paano nabuo ang ${ui.bd==='gcash'?'GCash':ui.bd==
 <table><tr><th></th><th>7 araw</th><th>14 araw</th><th>30 araw</th></tr>
 <tr><td>Due</td><td>${peso(f.due[7])}</td><td>${peso(f.due[14])}</td><td>${peso(f.due[30])}</td></tr>
 <tr><td>Pera pagkatapos</td>${[7,14,30].map(n=>`<td class="${cls(f.proj[n])}"><b>${peso(f.proj[n])}</b></td>`).join('')}</tr></table>
-<div class="sm mute" style="margin-top:6px">Batay sa average mong pasok/labas (huling 14 araw): ${peso(f.daily)}/araw</div></div>
+<div class="sm mute" style="margin-top:6px">${f.lowData?'Walang kasamang papasok na benta (kulang pa ang log).':'Batay sa average mong pasok/labas (huling 14 araw): '+peso(f.daily)+'/araw'}</div></div>
 <div class="card"><h3>Susunod na bayarin</h3>${up}</div>
 <div class="card"><h3>Ngayong buwan</h3>
 <div class="row"><span>Benta</span><b>${peso(m.sales)}</b></div>
