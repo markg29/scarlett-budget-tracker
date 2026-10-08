@@ -391,6 +391,7 @@ function renderBills(){
 <label>Halaga</label><input type="number" name="amount" inputmode="decimal" min="0" step="any" value="${esc(v.amount)}" required>
 ${e?'':`<div class="grid2"><div><label>Petsa ng resibo</label><input type="date" name="receipt" value="${t}"></div><div><label>Terms</label><select name="terms">${opt([['0','Manual'],['7','7 araw'],['14','14 araw'],['30','30 araw']],'7')}</select></div></div>`}
 <label>Due date</label><input type="date" name="due" value="${v.due}" required>
+${e?'':`<label>Bayad na ba ngayon?</label><select name="paynow">${opt([['','Hindi pa, i-lista lang'],['Cash','Oo, bayad na ngayon sa Cash'],['GCash','Oo, bayad na ngayon sa GCash'],['Personal','Oo, bayad na ngayon sa Personal']],'')}</select>`}
 <label>Umuulit?</label><select name="repeat">${opt([['none','Hindi'],['weekly','Kada linggo'],['biweekly','Kada 2 linggo'],['monthly','Kada buwan']],v.repeat||'none')}</select>
 <label>Note</label><input name="notes" maxlength="200" value="${esc(v.notes)}">
 <div class="grid2"><button class="full">Save</button><button type="button" class="ghost full" data-act="cancel">Kansel</button></div></form></div>`:'';
@@ -479,8 +480,12 @@ document.addEventListener('submit',async ev=>{
   }else if(f.id==='fTr'){
     await run({action:'addTransfer',date:todayStr(),from:d.from,to:d.to,amount:d.amount},'Nailipat ✓');
   }else if(f.id==='fBill'){
-    const ok=await run({action:'savePayable',id:ui.edit||undefined,type:d.type,name:d.name,amount:d.amount,due:d.due,repeat:d.repeat,notes:d.notes},'Na-save ✓');
-    if(ok){ui.form=false;ui.edit=null;render();}
+    const before=new Set(S.pay.map(p=>p.id));
+    const ok=await run({action:'savePayable',id:ui.edit||undefined,type:d.type,name:d.name,amount:d.amount,due:d.due,repeat:d.repeat,notes:d.notes},d.paynow?undefined:'Na-save ✓');
+    if(!ok)return;
+    ui.form=false;ui.edit=null;
+    if(d.paynow){const np=S.pay.find(p=>!before.has(p.id));if(np)await run({action:'pay',id:np.id,date:todayStr(),wallet:d.paynow},'Nabayaran na ✓');}
+    render();
   }else if(f.id==='fSet'){
     const keys=['opening_cash','opening_gcash','opening_personal','opening_barya','margin_pct','buffer'],lab={opening_cash:'Cash',opening_gcash:'GCash',opening_personal:'Personal',opening_barya:'Barya',margin_pct:'Margin %',buffer:'Buffer'};
     const ch=keys.filter(k=>(+d[k]||0)!==(+S.settings[k]||0));
