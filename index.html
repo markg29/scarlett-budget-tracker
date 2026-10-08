@@ -96,13 +96,14 @@ function sum(a,f){return a.reduce((t,x)=>t+(+f(x)||0),0);}
 function calcWallets(st,log,pay,tr){
   tr=tr||[];
   const paid=pay.filter(p=>p.status==='Paid');
-  const pw=w=>sum(paid.filter(p=>(p.wallet==='GCash'||p.wallet==='Personal'?p.wallet:'Cash')===w),p=>p.amount);
+  const pw=w=>sum(paid.filter(p=>(['GCash','Personal','Barya'].includes(p.wallet)?p.wallet:'Cash')===w),p=>p.amount);
   const tIn=w=>sum(tr.filter(x=>x.to===w),x=>x.amount),tOut=w=>sum(tr.filter(x=>x.from===w),x=>x.amount);
   const cash=(+st.opening_cash||0)+sum(log,l=>l.sales)-sum(log,l=>l.gsales)+sum(log,l=>l.fee)+sum(log,l=>l.loadsale)+sum(log,l=>l.cashin)-sum(log,l=>l.cashout)
     -(sum(log,l=>l.stock)-sum(log,l=>l.gstock))-(sum(log,l=>l.opex)-sum(log,l=>l.gopex))-pw('Cash')+tIn('Cash')-tOut('Cash');
   const gcash=(+st.opening_gcash||0)+sum(log,l=>l.gsales)-sum(log,l=>l.cashin)+sum(log,l=>l.cashout)+sum(log,l=>l.cofee)-sum(log,l=>l.gstock)-sum(log,l=>l.gopex)-sum(log,l=>l.loadcost)-pw('GCash')+tIn('GCash')-tOut('GCash');
   const personal=(+st.opening_personal||0)+tIn('Personal')-tOut('Personal')-pw('Personal');
-  return{cash,gcash,personal,total:cash+gcash+personal};
+  const barya=(+st.opening_barya||0)+tIn('Barya')-tOut('Barya')-pw('Barya');
+  return{cash,gcash,personal,barya,total:cash+gcash+personal+barya};
 }
 function calcCash(st,log,pay,tr){return calcWallets(st,log,pay,tr).total;}
 function gKita(l){return(+l.fee||0)+(+l.cofee||0)+(+l.loadsale||0)-(+l.loadcost||0);}
@@ -134,7 +135,7 @@ function forecast(st,log,pay,today,H,tr){
   }
   const due={},proj={};
   [7,14,30].forEach(n=>{due[n]=sum(events.filter(e=>e.day<=n),e=>e.amount);proj[n]=series[Math.min(n,H)].bal;});
-  return{cash0,cash:w.cash,gcash:w.gcash,personal:w.personal,daily,series,min,minDay,minDate:addDays(today,minDay),firstNeg,due,proj,
+  return{cash0,cash:w.cash,gcash:w.gcash,personal:w.personal,barya:w.barya,daily,series,min,minDay,minDate:addDays(today,minDay),firstNeg,due,proj,
     safe:Math.max(0,Math.floor(min-buffer)),overdue:sum(events.filter(e=>e.overdue),e=>e.amount),events};
 }
 function monthSummary(st,log,pay,ym){
@@ -217,6 +218,7 @@ function renderHome(){
   else if(f.daily<0)notes.push(`Cash lang: lugi ka ng ${peso(-f.daily)} kada araw sa average (mas malaki ang labas kesa pasok).`);
   if(f.gcash<0)notes.push('Negative ang GCash mo: may kulang sa log (cash-in/out o paglipat) o kulang ang panimulang GCash.');
   if(f.personal<0)notes.push('Negative ang Personal mo: may kulang na lipat pera o panimulang personal.');
+  if(f.barya<0)notes.push('Negative ang Barya mo: may kulang na lipat pera o panimulang barya.');
   if(f.cash<0)notes.push('Negative ang Cash mo: may kulang sa log o sa panimulang cash.');
   if(f.overdue>0)notes.push(`May lampas na due: ${peso(f.overdue)}.`);
   const up=f.events.slice(0,6).map(e=>`<div class="item"><div>${esc(e.name)}<span class="tag ${e.overdue?'od':''}">${e.overdue?'LAMPAS':esc(e.type)}</span><div class="sm mute">${dlabel(e.due)}${e.day>0?' · '+e.day+' araw':''}</div></div><b>${peso(e.amount)}</b></div>`).join('')||'<div class="mute">Walang nakabinbing bayarin.</div>';
@@ -226,8 +228,8 @@ function renderHome(){
     else if(m.totalNet<0)verdict='Kumikita/pantay ang store, pero nauubos sa personal na gastos.';
     else verdict='Positibo ang store at ang kabuuan ngayong buwan 👍';
   }
-  return `<div class="card"><h3>Kabuuang pera (Cash + GCash + Personal)</h3><div class="big ${cls(f.cash0)}">${peso(f.cash0)}</div>
-<div class="grid2" style="margin:8px 0;grid-template-columns:repeat(3,1fr)"><div class="card" style="margin:0;padding:10px;background:#f3f5f4"><div class="sm mute">💵 Cash</div><b class="${cls(f.cash)}">${peso(f.cash)}</b></div><div class="card" style="margin:0;padding:10px;background:#f3f5f4"><div class="sm mute">📱 GCash</div><b class="${cls(f.gcash)}">${peso(f.gcash)}</b></div><div class="card" style="margin:0;padding:10px;background:#f3f5f4"><div class="sm mute">👤 Personal</div><b class="${cls(f.personal)}">${peso(f.personal)}</b></div></div>
+  return `<div class="card"><h3>Kabuuang pera (Cash + GCash + Personal + Barya)</h3><div class="big ${cls(f.cash0)}">${peso(f.cash0)}</div>
+<div class="grid2" style="margin:8px 0;grid-template-columns:repeat(2,1fr)"><div class="card" style="margin:0;padding:10px;background:#f3f5f4"><div class="sm mute">💵 Cash</div><b class="${cls(f.cash)}">${peso(f.cash)}</b></div><div class="card" style="margin:0;padding:10px;background:#f3f5f4"><div class="sm mute">📱 GCash</div><b class="${cls(f.gcash)}">${peso(f.gcash)}</b></div><div class="card" style="margin:0;padding:10px;background:#f3f5f4"><div class="sm mute">👤 Personal</div><b class="${cls(f.personal)}">${peso(f.personal)}</b></div><div class="card" style="margin:0;padding:10px;background:#f3f5f4"><div class="sm mute">🪙 Barya</div><b class="${cls(f.barya)}">${peso(f.barya)}</b></div></div>
 <div class="sm mute">Pwede mong kunin (personal) bukod sa nakalistang bayarin: <b>${peso(f.safe)}</b></div></div>
 <div class="banner ${b}">${msg}${notes.map(n=>`<div class="sm" style="font-weight:400;margin-top:4px">${n}</div>`).join('')}</div>
 <div class="card"><h3>Forecast 30 araw</h3>${spark(f.series)}
@@ -278,7 +280,7 @@ function renderLog(){
 <button class="full">Save personal</button></form></div>`:'';
   let body;
   if(T==='lipat'){
-    body=`<div class="card"><form id="fTr"><div class="grid2"><div><label>Mula sa</label><select name="from"><option>Cash</option><option>GCash</option><option>Personal</option></select></div><div><label>Papunta sa</label><select name="to"><option>GCash</option><option>Cash</option><option>Personal</option></select></div></div>
+    body=`<div class="card"><form id="fTr"><div class="grid2"><div><label>Mula sa</label><select name="from"><option>Cash</option><option>GCash</option><option>Personal</option><option>Barya</option></select></div><div><label>Papunta sa</label><select name="to"><option>Barya</option><option>GCash</option><option>Cash</option><option>Personal</option></select></div></div>
 <label>Halaga</label><input type="number" name="amount" inputmode="decimal" min="0" step="any" required>
 <button class="full">Ilipat</button></form><div class="sm mute" style="margin-top:8px">Hindi nito binabago ang kabuuang pera, nagpapalit lang ng wallet.</div></div>
 <div class="card"><h3>Huling paglipat</h3>${S.transfers.slice().sort((a,b)=>b.date.localeCompare(a.date)).slice(0,8).map(x=>`<div class="item"><div class="sm">${dlabel(x.date)} · ${esc(x.from)} → ${esc(x.to)} · <b>${peso(x.amount)}</b></div><button class="danger sm" data-act="deltr" data-id="${esc(x.id)}">✕</button></div>`).join('')||'<div class="mute">Wala pa.</div>'}</div>`;
@@ -330,6 +332,7 @@ function renderSet(){
 <label>Panimulang CASH (cash na hawak mo nung nagsimula ka mag-log)</label><input type="number" name="opening_cash" inputmode="decimal" step="any" value="${+s.opening_cash||0}">
 <label>Panimulang GCASH (balance ng GCash wallet mo nung nagsimula ka mag-log)</label><input type="number" name="opening_gcash" inputmode="decimal" step="any" value="${+s.opening_gcash||0}">
 <label>Panimulang PERSONAL (pera na pang-sarili mo)</label><input type="number" name="opening_personal" inputmode="decimal" step="any" value="${+s.opening_personal||0}">
+<label>Panimulang BARYA (coins para sa store, hiwalay sa Pondo)</label><input type="number" name="opening_barya" inputmode="decimal" step="any" value="${+s.opening_barya||0}">
 <label>Tantyang margin ng tubo sa benta (%)</label><input type="number" name="margin_pct" inputmode="decimal" step="any" value="${+s.margin_pct||0}">
 <label>Buffer (pinakamababang pera na gusto mong laging may natitira)</label><input type="number" name="buffer" inputmode="decimal" step="any" value="${+s.buffer||0}">
 <button class="full">I-save</button></form></div>`;
@@ -384,7 +387,7 @@ document.addEventListener('submit',async ev=>{
     const ok=await run({action:'savePayable',id:ui.edit||undefined,type:d.type,name:d.name,amount:d.amount,due:d.due,repeat:d.repeat,notes:d.notes},'Na-save ✓');
     if(ok){ui.form=false;ui.edit=null;render();}
   }else if(f.id==='fSet'){
-    await run({action:'saveSettings',settings:{opening_cash:d.opening_cash,opening_gcash:d.opening_gcash,opening_personal:d.opening_personal,margin_pct:d.margin_pct,buffer:d.buffer}},'Na-save ✓');
+    await run({action:'saveSettings',settings:{opening_cash:d.opening_cash,opening_gcash:d.opening_gcash,opening_personal:d.opening_personal,opening_barya:d.opening_barya,margin_pct:d.margin_pct,buffer:d.buffer}},'Na-save ✓');
   }else if(f.id==='fCfg'){
     cfg={url:d.url.trim(),pin:d.pin.trim()};
     localStorage.setItem('pk_cfg',JSON.stringify(cfg));
