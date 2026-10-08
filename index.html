@@ -98,7 +98,7 @@ function calcWallets(st,log,pay,tr){
   const paid=pay.filter(p=>p.status==='Paid');
   const pw=w=>sum(paid.filter(p=>(p.wallet==='GCash'||p.wallet==='Personal'?p.wallet:'Cash')===w),p=>p.amount);
   const tIn=w=>sum(tr.filter(x=>x.to===w),x=>x.amount),tOut=w=>sum(tr.filter(x=>x.from===w),x=>x.amount);
-  const cash=(+st.opening_cash||0)+sum(log,l=>l.sales)+sum(log,l=>l.fee)+sum(log,l=>l.loadsale)+sum(log,l=>l.cashin)-sum(log,l=>l.cashout)
+  const cash=(+st.opening_cash||0)+sum(log,l=>l.sales)-sum(log,l=>l.gsales)+sum(log,l=>l.fee)+sum(log,l=>l.loadsale)+sum(log,l=>l.cashin)-sum(log,l=>l.cashout)
     -(sum(log,l=>l.stock)-sum(log,l=>l.gstock))-(sum(log,l=>l.opex)-sum(log,l=>l.gopex))-pw('Cash')+tIn('Cash')-tOut('Cash');
   const gcash=(+st.opening_gcash||0)+sum(log,l=>l.gsales)-sum(log,l=>l.cashin)+sum(log,l=>l.cashout)+sum(log,l=>l.cofee)-sum(log,l=>l.gstock)-sum(log,l=>l.gopex)-sum(log,l=>l.loadcost)-pw('GCash')+tIn('GCash')-tOut('GCash');
   const personal=(+st.opening_personal||0)+tIn('Personal')-tOut('Personal')-pw('Personal');
@@ -111,7 +111,7 @@ function avgNet(log,today,N){
   const rec=log.filter(l=>l.date>=start&&l.date<=today);
   if(!rec.length)return 0;
   const first=rec.reduce((m,l)=>l.date<m?l.date:m,rec[0].date);
-  return sum(rec,l=>(+l.sales||0)+(+l.gsales||0)+gKita(l)-(+l.stock||0)-(+l.opex||0))/(diffDays(first,today)+1);
+  return sum(rec,l=>(+l.sales||0)+gKita(l)-(+l.stock||0)-(+l.opex||0))/(diffDays(first,today)+1);
 }
 function forecast(st,log,pay,today,H,tr){
   H=H||30;
@@ -141,7 +141,7 @@ function monthSummary(st,log,pay,ym){
   const L=log.filter(l=>String(l.date).startsWith(ym));
   const paid=pay.filter(p=>p.status==='Paid'&&String(p.paidDate).startsWith(ym));
   const by=t=>sum(paid.filter(p=>p.type===t),p=>p.amount);
-  const sales=sum(L,l=>(+l.sales||0)+(+l.gsales||0)),fee=sum(L,gKita),stock=sum(L,l=>l.stock),opex=sum(L,l=>l.opex);
+  const sales=sum(L,l=>+l.sales||0),fee=sum(L,gKita),stock=sum(L,l=>l.stock),opex=sum(L,l=>l.opex);
   const sup=by('Supplier'),staff=by('Staff'),store=by('Store'),pers=by('Personal');
   const storeOut=stock+opex+sup+staff+store,storeNet=sales+fee-storeOut;
   return{sales,fee,stock,opex,sup,staff,store,pers,storeOut,storeNet,totalNet:storeNet-pers,
@@ -249,8 +249,8 @@ ${verdict?`<div class="sm" style="margin-top:8px">${verdict}</div>`:''}</div>`;
 
 function logFields(t){
   const n=(k,l)=>`<label>${l}</label><input type="number" name="${k}" inputmode="decimal" min="0" step="any" placeholder="0">`;
-  if(t==='benta')return n('sales','Benta na CASH ang bayad (kung galing POS: total bawas ang binayad via GCash)')+`<div class="sm mute" style="margin-top:6px">Ang binayad via GCash ay ilagay sa 📱 GCash tab.</div>`;
-  if(t==='gcash')return `<div class="sub">💳 CUSTOMER NAGBAYAD VIA GCASH (benta, walang charge)</div>`+n('gsales','Halaga ng benta na binayad via GCash')
+  if(t==='benta')return n('sales','Total na benta (galing POS, kasama ang binayad via GCash)')+`<div class="sm mute" style="margin-top:6px">May customer na nagbayad via GCash? Ilagay iyon sa 📱 GCash tab para madagdag sa GCash wallet. Hindi madodoble ang benta.</div>`;
+  if(t==='gcash')return `<div class="sub">💳 GCASH PAYMENT NG CUSTOMER (walang charge)</div>`+n('gsales','Halaga na binayad via GCash (kasama na sa Total na benta)')+`<div class="sm mute">Ililipat lang nito ang halaga mula sa Cash papunta sa GCash wallet. Hindi nito dinadagdagan ang benta.</div>`
     +`<div class="sub">⬆️ CASH-IN: customer nag-abot ng cash, ako nag-send ng GCash</div>`+n('cashin','Halaga na na-send ko')+n('fee','Fee (cash na pumasok)')
     +`<div class="sub">⬇️ CASH-OUT: customer nag-send ng GCash, ako nag-abot ng cash</div>`+n('cashout','Cash na inabot ko')+n('cofee','Fee (ibawas man sa inabot o isinama sa send)')
     +`<div class="sub">📲 LOAD: nag-load ako gamit ang GCash, customer nagbayad ng cash</div>`+n('loadsale','Cash na tinanggap sa customer')+n('loadcost','Ibinawas sa GCash ko (halaga ng load)')
@@ -260,7 +260,7 @@ function logFields(t){
 }
 function logDesc(l){
   const p=[],m=(c,v)=>{if(+v)p.push(c+' '+peso(v));};
-  m('🛒 Benta (cash)',l.sales);m('💳 Benta via GCash',l.gsales);m('📦 Stock',l.stock);m('🧾 Gastos',l.opex);
+  m('🛒 Benta',l.sales);m('💳 GCash payment',l.gsales);m('📦 Stock',l.stock);m('🧾 Gastos',l.opex);
   m('⬆️ Cash-in',l.cashin);m('⬇️ Cash-out',l.cashout);m('💰 Fee',(+l.fee||0)+(+l.cofee||0));
   if(+l.loadsale||+l.loadcost)p.push('📲 Load '+peso(l.loadsale)+' (kita '+peso((+l.loadsale||0)-(+l.loadcost||0))+')');
   if(+l.gstock)p.push('(stock via GCash '+peso(l.gstock)+')');if(+l.gopex)p.push('(gastos via GCash '+peso(l.gopex)+')');
@@ -270,7 +270,7 @@ function renderLog(){
   const t=todayStr(),T=ui.logType,td=S.log.filter(l=>l.date===t);
   const rec=S.log.slice().sort((a,b)=>b.date.localeCompare(a.date)).slice(0,20);
   const seg=[['benta','🛒 Benta'],['gcash','📱 GCash'],['gastos','🧾 Gastos'],['lipat','🔁 Lipat']].map(x=>`<button type="button" class="${T===x[0]?'on':''}" data-act="logtype" data-v="${x[0]}">${x[1]}</button>`).join('');
-  const today=`<div class="card"><h3>Ngayong araw</h3><div class="stat"><div><span class="sm mute">Benta</span><b>${peso(sum(td,l=>(+l.sales||0)+(+l.gsales||0)))}</b></div><div><span class="sm mute">Gastos</span><b>${peso(sum(td,l=>(+l.stock)+(+l.opex)))}</b></div><div><span class="sm mute">Kita GCash</span><b>${peso(sum(td,gKita))}</b></div></div></div>`;
+  const today=`<div class="card"><h3>Ngayong araw</h3><div class="stat"><div><span class="sm mute">Benta</span><b>${peso(sum(td,l=>+l.sales||0))}</b></div><div><span class="sm mute">Gastos</span><b>${peso(sum(td,l=>(+l.stock)+(+l.opex)))}</b></div><div><span class="sm mute">Kita GCash</span><b>${peso(sum(td,gKita))}</b></div></div></div>`;
   const pers=T==='gastos'?`<div class="card"><h3>Personal na gastos</h3><div class="sm mute">Pagkain, pamasahe at iba pang sa iyo, hindi sa negosyo. Hindi ito kasama sa tantyang tubo ng store.</div>
 <form id="fPers"><label>Ano ito? (optional)</label><input name="name" maxlength="80" placeholder="hal. Pamasahe, Pagkain">
 <label>Halaga</label><input type="number" name="amount" inputmode="decimal" min="0" step="any" required>
