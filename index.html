@@ -86,6 +86,8 @@ nav button.on{background:var(--pri);color:#fff}
 #toast.ok{background:var(--pri-d)}#toast.err{background:var(--bad)}
 #toast{position:fixed;left:14px;right:14px;bottom:98px;max-width:532px;margin:0 auto;background:var(--ink);color:#fff;padding:13px 16px;border-radius:18px;display:none;z-index:9;text-align:center;font:600 16px var(--disp);box-shadow:0 12px 28px -10px rgba(0,0,0,.4)}
 table{width:100%;border-collapse:collapse}th,td{padding:8px 4px;text-align:right;border-bottom:1px dashed var(--line)}th:first-child,td:first-child{text-align:left}th{font-size:12.5px;color:var(--mute);font-weight:700}tr:last-child td{border-bottom:0}
+.it-r{display:flex;flex-direction:column;align-items:flex-end;gap:8px;flex:0 0 auto}.it-r b{font:600 17px var(--disp)}.more{padding:7px 12px;letter-spacing:.1em}
+.paybox{background:var(--soft);border-radius:14px;padding:10px 12px;margin-top:8px}.paybox .acts{margin-top:6px}
 </style>
 </head>
 <body>
@@ -193,7 +195,7 @@ function ld(k,d){try{return JSON.parse(localStorage.getItem(k))||d;}catch(e){ret
 let cfg=API_URL?{url:API_URL,pin:API_PIN}:ld('pk_cfg',{url:'',pin:''});
 let S=ld('pk_cache',{settings:{},log:[],pay:[],transfers:[]});
 S.transfers=S.transfers||[];
-let ui={tab:'home',filter:'all',form:false,edit:null,busy:false,logType:'benta'};
+let ui={pay:null,more:null,setEdit:false,tab:'home',filter:'all',form:false,edit:null,busy:false,logType:'benta'};
 
 function toast(m,kind){const t=$('#toast');t.textContent=m;t.className=kind||'';t.style.display='block';clearTimeout(toast.t);toast.t=setTimeout(()=>t.style.display='none',kind==='err'?6000:3000);
   try{if(navigator.vibrate)navigator.vibrate(kind==='err'?[60,40,60]:30);}catch(e){}}
@@ -393,14 +395,22 @@ ${e?'':`<div class="grid2"><div><label>Petsa ng resibo</label><input type="date"
 <label>Note</label><input name="notes" maxlength="200" value="${esc(v.notes)}">
 <div class="grid2"><button class="full">Save</button><button type="button" class="ghost full" data-act="cancel">Kansel</button></div></form></div>`:'';
   const chips=[['all','Lahat'],...TYPES.map(x=>[x,x])].map(c=>`<button class="chip ${F===c[0]?'on':''}" data-act="filter" data-v="${c[0]}">${c[1]}</button>`).join('');
-  const list=open.map(p=>{
-    const d=diffDays(t,p.due),od=d<0;
-    return `<div class="item"><div><b>${esc(p.name)}</b><span class="tag">${esc(p.type)}</span>${p.repeat&&p.repeat!=='none'?'<span class="tag">↻ '+esc(p.repeat)+'</span>':''}
-<div class="sm ${od?'neg':'mute'}">${od?'LAMPAS '+(-d)+' araw · ':d===0?'Due ngayon · ':'Due '+d+' araw · '}${dlabel(p.due)}</div>
-<div class="acts"><button class="sm" data-act="pay" data-w="Cash" data-id="${esc(p.id)}">✓ Bayad (Cash)</button><button class="sm" data-act="pay" data-w="GCash" data-id="${esc(p.id)}">✓ Bayad (GCash)</button><button class="ghost sm" data-act="pay" data-w="Personal" data-id="${esc(p.id)}">✓ Bayad (Personal)</button><button class="ghost sm" data-act="edit" data-id="${esc(p.id)}">Edit</button><button class="danger sm" data-act="delbill" data-id="${esc(p.id)}">✕</button></div></div>
-<b>${peso(p.amount)}</b></div>`;}).join('')||'<div class="mute">Walang bayarin 🎉</div>';
+  const item=p=>{
+    const d=diffDays(t,p.due),od=d<0,id=esc(p.id);
+    const panel=ui.pay===p.id?`<div class="paybox"><div class="sm mute">Saan huhugutin ang ${peso(p.amount)}?</div><div class="acts"><button class="sm" data-act="pay" data-w="Cash" data-id="${id}">Cash</button><button class="sm" data-act="pay" data-w="GCash" data-id="${id}">GCash</button><button class="sm" data-act="pay" data-w="Personal" data-id="${id}">Personal</button><button class="ghost sm" data-act="closepay">Kansel</button></div></div>`
+      :ui.more===p.id?`<div class="acts"><button class="ghost sm" data-act="edit" data-id="${id}">Edit</button><button class="danger sm" data-act="delbill" data-id="${id}">Burahin</button><button class="ghost sm" data-act="closepay">Isara</button></div>`:'';
+    return `<div class="item"><div style="flex:1;min-width:0"><b>${esc(p.name)}</b>${F==='all'&&p.type!=='Personal'?'<span class="tag">'+esc(p.type)+'</span>':''}${p.repeat&&p.repeat!=='none'?'<span class="tag">↻ '+esc(p.repeat)+'</span>':''}
+<div class="sm ${od?'neg':'mute'}">${od?'LAMPAS '+(-d)+' araw · ':d===0?'Due ngayon · ':'Due '+d+' araw · '}${dlabel(p.due)}</div>${panel}</div>
+<div class="it-r"><b>${peso(p.amount)}</b>${panel?'':`<div class="acts" style="margin:0"><button class="sm" data-act="askpay" data-id="${id}">Bayad</button><button class="ghost sm more" data-act="more" data-id="${id}" aria-label="Iba pa">⋯</button></div>`}</div></div>`;};
+  const sec=(title,arr)=>`<div class="card"><h3>${title} (${arr.length}) · ${peso(sum(arr,p=>p.amount))}</h3>${arr.map(item).join('')}</div>`;
+  let lists;
+  if(!open.length)lists='<div class="card"><div class="mute">Walang bayarin 🎉</div></div>';
+  else if(F==='all'){
+    const st=open.filter(p=>p.type!=='Personal'),pe=open.filter(p=>p.type==='Personal');
+    lists=(st.length?sec('Para sa store',st):'')+(pe.length?sec('Personal',pe):'');
+  }else lists=sec(F==='Personal'?'Personal':F,open);
   return `${form}<div class="card"><button class="full" style="margin:0" data-act="newbill">+ Dagdag na bayarin</button></div>
-<div class="chips">${chips}</div><div class="card"><h3>Hindi pa bayad (${open.length}) · ${peso(sum(open,p=>p.amount))}</h3>${list}</div>
+<div class="chips">${chips}</div>${lists}
 <div class="card"><h3>Nabayaran na (huli)</h3>${paid.map(p=>`<div class="row"><span>${esc(p.name)} <span class="sm mute">${dlabel(p.paidDate)}</span></span><span>${peso(p.amount)}</span></div>`).join('')||'<div class="mute">Wala pa.</div>'}</div>`;
 }
 
@@ -410,14 +420,12 @@ function renderSet(){
 <label>Apps Script Web App URL</label><input name="url" value="${esc(cfg.url)}" placeholder="https://script.google.com/macros/s/.../exec">
 <label>PIN (kung nilagay mo sa Code.gs)</label><input name="pin" value="${esc(cfg.pin)}" type="password" autocomplete="off">
 <button class="full">I-save at i-test</button></form></div>`;
-  return conn+`<div class="card"><h3>Pera</h3><form id="fSet">
-<label>Panimulang CASH (cash na hawak mo nung nagsimula ka mag-log)</label><input type="number" name="opening_cash" inputmode="decimal" step="any" value="${+s.opening_cash||0}">
-<label>Panimulang GCASH (balance ng GCash wallet mo nung nagsimula ka mag-log)</label><input type="number" name="opening_gcash" inputmode="decimal" step="any" value="${+s.opening_gcash||0}">
-<label>Panimulang PERSONAL (pera na pang-sarili mo)</label><input type="number" name="opening_personal" inputmode="decimal" step="any" value="${+s.opening_personal||0}">
-<label>Panimulang BARYA (coins para sa store, hiwalay sa Pondo)</label><input type="number" name="opening_barya" inputmode="decimal" step="any" value="${+s.opening_barya||0}">
-<label>Tantyang margin ng tubo sa benta (%)</label><input type="number" name="margin_pct" inputmode="decimal" step="any" value="${+s.margin_pct||0}">
-<label>Buffer (pinakamababang pera na gusto mong laging may natitira)</label><input type="number" name="buffer" inputmode="decimal" step="any" value="${+s.buffer||0}">
-<button class="full">I-save</button></form></div>`;
+  const F=[['opening_cash','Panimulang Cash','Cash na hawak mo nung nagsimula ka mag-log'],['opening_gcash','Panimulang GCash','Balance ng GCash wallet nung nagsimula ka'],['opening_personal','Panimulang Personal','Pera na pang-sarili mo'],['opening_barya','Panimulang Barya','Coins ng store, hiwalay sa Pondo'],['margin_pct','Margin ng tubo (%)','Tantya ng tubo sa benta'],['buffer','Buffer','Pinakamababang pera na gusto mong laging may natitira']];
+  if(!ui.setEdit)return conn+`<div class="card"><h3>Pera</h3>${F.map(f=>`<div class="row"><span>${f[1]}<div class="sm mute">${f[2]}</div></span><b>${f[0]==='margin_pct'?(+s[f[0]]||0)+'%':peso(+s[f[0]]||0)}</b></div>`).join('')}
+<button class="ghost full" data-act="setedit">✏️ Baguhin</button></div>`;
+  return conn+`<div class="card"><h3>Baguhin ang Settings</h3><div class="banner warn">Baguhin lang ito kung sigurado ka. Apektado ang lahat ng balance at forecast.</div><form id="fSet">
+${F.map(f=>`<label>${f[1]} <span class="mute sm">· ${f[2]}</span></label><input type="number" name="${f[0]}" inputmode="decimal" step="any" value="${+s[f[0]]||0}">`).join('')}
+<div class="grid2"><button class="full">I-save</button><button type="button" class="ghost full" data-act="setcancel">Kansel</button></div></form></div>`;
 }
 
 function render(){
@@ -429,16 +437,21 @@ function render(){
 
 document.addEventListener('click',async ev=>{
   const tb=ev.target.closest('[data-tab]');
-  if(tb){ui.tab=tb.dataset.tab;ui.form=false;ui.edit=null;render();window.scrollTo(0,0);return;}
+  if(tb){ui.tab=tb.dataset.tab;ui.form=false;ui.edit=null;ui.pay=null;ui.more=null;ui.setEdit=false;render();window.scrollTo(0,0);return;}
   const el=ev.target.closest('[data-act]');if(!el)return;
   const a=el.dataset.act,id=el.dataset.id;
   if(a==='reload')return reload();
   if(a==='logtype'){ui.logType=el.dataset.v;return render();}
   if(a==='filter'){ui.filter=el.dataset.v;return render();}
+  if(a==='askpay'){ui.pay=id;ui.more=null;return render();}
+  if(a==='more'){ui.more=id;ui.pay=null;return render();}
+  if(a==='closepay'){ui.pay=null;ui.more=null;return render();}
+  if(a==='setedit'){ui.setEdit=true;render();window.scrollTo(0,0);return;}
+  if(a==='setcancel'){ui.setEdit=false;return render();}
   if(a==='newbill'){ui.form=true;ui.edit=null;render();window.scrollTo(0,0);return;}
   if(a==='cancel'){ui.form=false;ui.edit=null;return render();}
   if(a==='edit'){ui.form=true;ui.edit=id;render();window.scrollTo(0,0);return;}
-  if(a==='pay'){const w=el.dataset.w||'Cash';if(confirm('Bayad na ba ito? Ibabawas sa '+w+' mo.'))await run({action:'pay',id,date:todayStr(),wallet:w},'Nabayaran na ✓');return;}
+  if(a==='pay'){const w=el.dataset.w||'Cash';ui.pay=null;ui.more=null;await run({action:'pay',id,date:todayStr(),wallet:w},'Nabayaran na ✓');return;}
   if(a==='deltr'){if(confirm('Burahin ang paglipat?'))await run({action:'delTransfer',id},'Binura');return;}
   if(a==='delbill'){if(confirm('Burahin ang bayarin na ito?'))await run({action:'delPayable',id},'Binura');return;}
   if(a==='dellog'){if(confirm('Burahin ang entry?'))await run({action:'delLog',id},'Binura');return;}
@@ -469,7 +482,11 @@ document.addEventListener('submit',async ev=>{
     const ok=await run({action:'savePayable',id:ui.edit||undefined,type:d.type,name:d.name,amount:d.amount,due:d.due,repeat:d.repeat,notes:d.notes},'Na-save ✓');
     if(ok){ui.form=false;ui.edit=null;render();}
   }else if(f.id==='fSet'){
-    await run({action:'saveSettings',settings:{opening_cash:d.opening_cash,opening_gcash:d.opening_gcash,opening_personal:d.opening_personal,opening_barya:d.opening_barya,margin_pct:d.margin_pct,buffer:d.buffer}},'Na-save ✓');
+    const keys=['opening_cash','opening_gcash','opening_personal','opening_barya','margin_pct','buffer'],lab={opening_cash:'Cash',opening_gcash:'GCash',opening_personal:'Personal',opening_barya:'Barya',margin_pct:'Margin %',buffer:'Buffer'};
+    const ch=keys.filter(k=>(+d[k]||0)!==(+S.settings[k]||0));
+    if(!ch.length){ui.setEdit=false;return render();}
+    if(!confirm('I-save ang pagbabago?\n\n'+ch.map(k=>lab[k]+': '+(+S.settings[k]||0)+' → '+(+d[k]||0)).join('\n')))return;
+    if(await run({action:'saveSettings',settings:{opening_cash:d.opening_cash,opening_gcash:d.opening_gcash,opening_personal:d.opening_personal,opening_barya:d.opening_barya,margin_pct:d.margin_pct,buffer:d.buffer}},'Na-save ✓')){ui.setEdit=false;render();}
   }else if(f.id==='fCfg'){
     cfg={url:d.url.trim(),pin:d.pin.trim()};
     localStorage.setItem('pk_cfg',JSON.stringify(cfg));
