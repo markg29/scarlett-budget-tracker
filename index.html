@@ -89,6 +89,7 @@ table{width:100%;border-collapse:collapse}th,td{padding:8px 4px;text-align:right
 .it-r{display:flex;flex-direction:column;align-items:flex-end;gap:8px;flex:0 0 auto}.it-r b{font:600 17px var(--disp)}.more{padding:7px 12px;letter-spacing:.1em}
 .paybox{background:var(--soft);border-radius:14px;padding:10px 12px;margin-top:8px}.paybox .acts{margin-top:6px}
 .tile[data-act=bd]{cursor:pointer}.bdbox{background:var(--soft);border-radius:16px;padding:12px 14px;margin:0 0 12px}.bdbox>b{font:600 15px var(--disp);color:var(--fur-d)}.bdbox .row{padding:5px 0;font-size:14px}
+.row.sub2{padding:3px 0 3px 14px;font-size:13.5px;border-bottom:0}
 </style>
 </head>
 <body>
@@ -201,7 +202,8 @@ function monthSummary(st,log,pay,ym){
   const sales=sum(L,l=>+l.sales||0),fee=sum(L,gKita),stock=sum(L,l=>l.stock),opex=sum(L,l=>l.opex);
   const sup=by('Supplier'),staff=by('Staff'),store=by('Store'),pers=by('Personal');
   const storeOut=stock+opex+sup+staff+store,storeNet=sales+fee-storeOut;
-  return{sales,fee,stock,opex,sup,staff,store,pers,storeOut,storeNet,totalNet:storeNet-pers,
+  const feeIn=sum(L,l=>l.fee),feeOut=sum(L,l=>l.cofee),loadP=sum(L,l=>(+l.loadsale||0)-(+l.loadcost||0));
+  return{sales,fee,feeIn,feeOut,loadP,stock,opex,sup,staff,store,pers,storeOut,storeNet,totalNet:storeNet-pers,
     estProfit:sales*((+st.margin_pct||0)/100)+fee-opex-staff-store};
 }
 //#LOGIC-END
@@ -328,7 +330,10 @@ ${ui.bd?`<div class="bdbox"><b>Paano nabuo ang ${ui.bd==='gcash'?'GCash':ui.bd==
 <div class="card"><h3>Susunod na bayarin</h3>${up}</div>
 <div class="card"><h3>Ngayong buwan</h3>
 <div class="row"><span>Benta</span><b>${peso(m.sales)}</b></div>
-<div class="row"><span class="mute">Kita sa GCash (fees + load)</span><span>${peso(m.fee)}</span></div>
+<div class="row"><span>Kita sa GCash</span><b>${peso(m.fee)}</b></div>
+<div class="row sub2"><span class="mute">Cash-in fee</span><span>${peso(m.feeIn)}</span></div>
+<div class="row sub2"><span class="mute">Cash-out fee</span><span>${peso(m.feeOut)}</span></div>
+<div class="row sub2"><span class="mute">Load (benta − gastos sa GCash)</span><span>${peso(m.loadP)}</span></div>
 <div class="row"><span class="mute">Labas store (stock + gastos + bayad supplier/staff/store)</span><span>${peso(m.storeOut)}</span></div>
 <div class="row"><span>Net ng store</span><b class="${cls(m.storeNet)}">${peso(m.storeNet)}</b></div>
 <div class="row"><span class="mute">Personal (nabayaran)</span><span>${peso(m.pers)}</span></div>
