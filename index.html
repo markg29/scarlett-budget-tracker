@@ -111,6 +111,7 @@ main,.card,.bubble{overflow-wrap:anywhere;word-break:break-word}.item>div,.ent>d
 // ====== ISANG BESES LANG: i-paste dito ang Apps Script URL (nagtatapos sa /exec) ======
 const API_URL='https://script.google.com/macros/s/AKfycbyqsMv_r7FbAmSJWvGhMFmHh177hiO2KS6onWPpFovH_HbmoizYhLB2bfHjetTDthIJfA/exec';
 const API_PIN='';
+const NEED_VER=8;   // pinakabagong bersyon ng Code.gs na kailangan ng app na ito
 const USER_NAME='Mark';   // pangalan na babatiin ni Kapi   // kung may PIN sa Code.gs, ilagay din dito
 // =======================================================================================
 //#LOGIC-START
@@ -236,6 +237,7 @@ let ui={editLog:null,bd:null,pay:null,more:null,setEdit:false,tab:'home',filter:
 function toast(m,kind){const t=$('#toast');t.textContent=m;t.className=kind||'';t.style.display='block';clearTimeout(toast.t);toast.t=setTimeout(()=>t.style.display='none',kind==='err'?6000:3000);
   try{if(navigator.vibrate)navigator.vibrate(kind==='err'?[60,40,60]:30);}catch(e){}}
 const BUSYMSG={addLog:'Sine-save...',editLog:'Sine-save...',savePayable:'Sine-save...',saveSettings:'Sine-save...',addTransfer:'Inililipat...',pay:'Binabayaran...',delLog:'Binubura...',delPayable:'Binubura...',delTransfer:'Binubura...',getAll:'Kumokonekta...'};
+let srvVer=null;
 let busyT=null;
 function showBusy(on,msg){
   const b=$('#busy');b.style.display=on?'flex':'none';clearTimeout(busyT);
@@ -257,6 +259,7 @@ async function api(body){
     finally{clearTimeout(tm);}
   }
   if(!j.ok)throw new Error(j.error||'May error');
+  srvVer=+j.ver||1;
   S={settings:j.settings,log:j.log,pay:j.pay,transfers:j.transfers||[]};
   try{localStorage.setItem('pk_cache',JSON.stringify(S));}catch(_){}
   $('#sync').textContent='Synced '+new Date().toLocaleTimeString('en-PH',{hour:'2-digit',minute:'2-digit'});
@@ -508,7 +511,8 @@ ${F.map(f=>`<label>${f[1]} <span class="mute sm">· ${f[2]}</span></label><input
 function render(){
   document.querySelectorAll('#nav button').forEach(b=>b.classList.toggle('on',b.dataset.tab===ui.tab));
   const y=window.scrollY;
-  $('#app').innerHTML=ui.tab==='home'?renderHome():ui.tab==='log'?renderLog():ui.tab==='bills'?renderBills():renderSet();
+  const warn=srvVer!==null&&srvVer<NEED_VER?`<div class="banner warn">⚠️ Luma pa ang Code.gs mo (v${srvVer}, kailangan v${NEED_VER}). Gagana ang karamihan, pero may mga bagong feature na hindi pa gagana. I-paste ang bagong Code.gs sa Apps Script, tapos <b>Deploy → Manage deployments → Edit → New version → Deploy</b>.</div>`:'';
+  $('#app').innerHTML=warn+(ui.tab==='home'?renderHome():ui.tab==='log'?renderLog():ui.tab==='bills'?renderBills():renderSet());
   window.scrollTo(0,y);
 }
 
