@@ -398,7 +398,7 @@ ${e?'':`<label>Bayad na ba ngayon?</label><select name="paynow">${opt([['','Hind
   const chips=[['all','Lahat'],...TYPES.map(x=>[x,x])].map(c=>`<button class="chip ${F===c[0]?'on':''}" data-act="filter" data-v="${c[0]}">${c[1]}</button>`).join('');
   const item=p=>{
     const d=diffDays(t,p.due),od=d<0,id=esc(p.id);
-    const panel=ui.pay===p.id?`<div class="paybox"><div class="sm mute">Saan huhugutin ang ${peso(p.amount)}?</div><div class="acts"><button class="sm" data-act="pay" data-w="Cash" data-id="${id}">Cash</button><button class="sm" data-act="pay" data-w="GCash" data-id="${id}">GCash</button><button class="sm" data-act="pay" data-w="Personal" data-id="${id}">Personal</button><button class="ghost sm" data-act="closepay">Kansel</button></div></div>`
+    const panel=ui.pay===p.id?`<div class="paybox"><label style="margin-top:0">Magkano ang babayaran? <span class="mute sm">· bawasan kung hulog lang</span></label><input type="number" class="payamt" inputmode="decimal" min="0" step="any" max="${+p.amount}" value="${+p.amount}"><div class="sm mute" style="margin:8px 0 2px">Saan huhugutin?</div><div class="acts"><button class="sm" data-act="pay" data-w="Cash" data-id="${id}">Cash</button><button class="sm" data-act="pay" data-w="GCash" data-id="${id}">GCash</button><button class="sm" data-act="pay" data-w="Personal" data-id="${id}">Personal</button><button class="ghost sm" data-act="closepay">Kansel</button></div></div>`
       :ui.more===p.id?`<div class="acts"><button class="ghost sm" data-act="edit" data-id="${id}">Edit</button><button class="danger sm" data-act="delbill" data-id="${id}">Burahin</button><button class="ghost sm" data-act="closepay">Isara</button></div>`:'';
     return `<div class="item"><div style="flex:1;min-width:0"><b>${esc(p.name)}</b>${F==='all'&&p.type!=='Personal'?'<span class="tag">'+esc(p.type)+'</span>':''}${p.repeat&&p.repeat!=='none'?'<span class="tag">↻ '+esc(p.repeat)+'</span>':''}
 <div class="sm ${od?'neg':'mute'}">${od?'LAMPAS '+(-d)+' araw · ':d===0?'Due ngayon · ':'Due '+d+' araw · '}${dlabel(p.due)}</div>${panel}</div>
@@ -452,7 +452,10 @@ document.addEventListener('click',async ev=>{
   if(a==='newbill'){ui.form=true;ui.edit=null;render();window.scrollTo(0,0);return;}
   if(a==='cancel'){ui.form=false;ui.edit=null;return render();}
   if(a==='edit'){ui.form=true;ui.edit=id;render();window.scrollTo(0,0);return;}
-  if(a==='pay'){const w=el.dataset.w||'Cash';ui.pay=null;ui.more=null;await run({action:'pay',id,date:todayStr(),wallet:w},'Nabayaran na ✓');return;}
+  if(a==='pay'){const w=el.dataset.w||'Cash';const inp=el.closest('.paybox')&&el.closest('.paybox').querySelector('.payamt'),p0=S.pay.find(x=>x.id===id),amt=inp?+inp.value:0;
+    if(inp&&!(amt>0)){toast('⚠️ Ilagay ang halaga','err');return;}
+    const part=p0&&amt>0&&amt<+p0.amount;
+    if(await run({action:'pay',id,date:todayStr(),wallet:w,amount:part?amt:undefined},part?'Hulog na-record ✓':'Nabayaran na ✓')){ui.pay=null;ui.more=null;render();}return;}
   if(a==='deltr'){if(confirm('Burahin ang paglipat?'))await run({action:'delTransfer',id},'Binura');return;}
   if(a==='delbill'){if(confirm('Burahin ang bayarin na ito?'))await run({action:'delPayable',id},'Binura');return;}
   if(a==='dellog'){if(confirm('Burahin ang entry?'))await run({action:'delLog',id},'Binura');return;}
