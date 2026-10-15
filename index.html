@@ -20,7 +20,9 @@ main{padding:14px 14px 4px;max-width:560px;margin:0 auto}
 .card{background:var(--card);border-radius:22px;padding:16px;margin-bottom:14px;border:1px solid var(--line);box-shadow:0 8px 22px -14px rgba(110,74,42,.35)}
 .card h3{margin:0 0 10px;font:600 17px var(--disp);color:var(--fur-d)}
 .big{font:600 38px/1.1 var(--disp);letter-spacing:-.01em}
+.grp{border:1px solid var(--line);border-radius:16px;margin:8px 0;background:var(--soft,#f5f1e6)}.grp summary{list-style:none;cursor:pointer;padding:13px 14px;display:flex;flex-direction:column;gap:2px;font-weight:700}.grp summary::-webkit-details-marker{display:none}.grp summary::after{content:'＋';position:absolute;right:14px;font-weight:400}.grp summary{position:relative;padding-right:40px}.grp[open] summary::after{content:'－'}.grp[open]{background:var(--card,#fff)}.grp .gin{padding:0 14px 14px}.grp summary i{font-style:normal;font-weight:400}.grp.pers{margin:0}
 .row{display:flex;justify-content:space-between;gap:10px;padding:8px 0;border-bottom:1px dashed var(--line)}
+.row>span:last-child,.row>b:last-child{white-space:nowrap;text-align:right}
 .row:last-child{border-bottom:0}
 .mute{color:var(--mute)}.sm{font-size:12.5px}
 .neg{color:var(--bad)}.pos{color:var(--ok)}
@@ -244,7 +246,7 @@ function ld(k,d){try{return JSON.parse(localStorage.getItem(k))||d;}catch(e){ret
 let cfg=API_URL?{url:API_URL,pin:API_PIN}:ld('pk_cfg',{url:'',pin:''});
 let S=ld('pk_cache',{settings:{},log:[],pay:[],transfers:[]});
 S.transfers=S.transfers||[];
-let ui={editLog:null,bd:null,pay:null,more:null,setEdit:false,tab:'home',filter:'all',form:false,edit:null,busy:false,logType:'benta'};
+let ui={editLog:null,bd:null,pay:null,more:null,setEdit:false,tab:'home',filter:'all',form:false,edit:null,busy:false,logType:'benta',entN:3};
 
 function toast(m,kind){const t=$('#toast');t.textContent=m;t.className=kind||'';t.style.display='block';clearTimeout(toast.t);toast.t=setTimeout(()=>t.style.display='none',kind==='err'?6000:3000);
   try{if(navigator.vibrate)navigator.vibrate(kind==='err'?[60,40,60]:30);}catch(e){}}
@@ -385,7 +387,14 @@ ${ui.bd?`<div class="bdbox"><b>Paano nabuo ang ${ui.bd==='gcash'?'GCash':ui.bd==
 <div class="row sub2"><span class="mute">Cash-in fee</span><span>${peso(m.feeIn)}</span></div>
 <div class="row sub2"><span class="mute">Cash-out fee</span><span>${peso(m.feeOut)}</span></div>
 <div class="row sub2"><span class="mute">Load (benta − gastos sa GCash)</span><span>${peso(m.loadP)}</span></div>
-<div class="row"><span class="mute">Labas store (stock + gastos + bayad supplier/staff/store)</span><span>${peso(m.storeOut)}</span></div>
+<div class="row"><span class="mute">Stock (binili + bayad supplier)</span><span>${peso(m.stock+m.sup)}</span></div>
+<div class="row sub2"><span class="mute">Stock na nilog</span><span>${peso(m.stock)}</span></div>
+<div class="row sub2"><span class="mute">Bayad supplier</span><span>${peso(m.sup)}</span></div>
+<div class="row"><span class="mute">Gastos (hindi stock)</span><span>${peso(m.opex+m.staff+m.store)}</span></div>
+<div class="row sub2"><span class="mute">Gastos sa log</span><span>${peso(m.opex)}</span></div>
+<div class="row sub2"><span class="mute">Sweldo</span><span>${peso(m.staff)}</span></div>
+<div class="row sub2"><span class="mute">Bayarin ng store (upa, kuryente...)</span><span>${peso(m.store)}</span></div>
+<div class="row"><span class="mute">Labas store (kabuuan)</span><span>${peso(m.storeOut)}</span></div>
 <div class="row"><span>Net ng store</span><b class="${cls(m.storeNet)}">${peso(m.storeNet)}</b></div>
 <div class="row"><span class="mute">Personal (nabayaran)</span><span>${peso(m.pers)}</span></div>
 <div class="row"><span>Net lahat</span><b class="${cls(m.totalNet)}">${peso(m.totalNet)}</b></div>
@@ -396,13 +405,14 @@ ${verdict?`<div class="sm" style="margin-top:8px">${verdict}</div>`:''}</div>`;
 function logFields(t){
   const n=(k,l)=>`<label>${l}</label><input type="number" name="${k}" inputmode="decimal" min="0" step="any" placeholder="0">`;
   if(t==='benta')return n('sales','Total na benta (galing POS, kasama ang binayad via GCash)')+`<div class="sm mute" style="margin-top:6px">May customer na nagbayad via GCash? Ilagay iyon sa 📱 GCash tab para madagdag sa GCash wallet. Hindi madodoble ang benta.</div>`;
-  if(t==='gcash')return `<div class="sub">💳 GCASH PAYMENT NG CUSTOMER (walang charge)</div>`+n('gsales','Halaga na binayad via GCash (kasama na sa Total na benta)')+`<div class="sm mute">Ililipat lang nito ang halaga mula sa Cash papunta sa GCash wallet. Hindi nito dinadagdagan ang benta.</div>`
-    +`<div class="sub">⬆️ CASH-IN: customer nag-abot ng cash, ako nag-send ng GCash</div>`+n('cashin','Halaga na na-send ko')+n('fee','Fee (cash na pumasok)')+`<div class="sm mute">Ang cash na tinanggap (halaga + fee) ay mapupunta sa 🧰 Pera ng GCash, hindi sa Cash ng store.</div>`
-    +`<div class="sub">⬇️ CASH-OUT: customer nag-send ng GCash, ako nag-abot ng cash</div>`+n('cashout','Halaga ng cash-out')+n('cofee','Fee')+`<label>Paano ang fee?</label><select name="feemode"><option value="incl">Ibabawas sa aabutin (aabutin = halaga − fee)</option><option value="extra">Dagdag ng customer sa send (aabutin = halaga)</option></select><div class="sm mute" style="margin-top:6px">Ang aabutin ay kukunin sa Cash ng store. Ang fee ay kita sa GCash.</div>`
-    +`<div class="sub">📲 LOAD: nag-load ako gamit ang GCash, customer nagbayad ng cash</div>`+n('loadsale','Cash na tinanggap sa customer (mapupunta sa Pera ng GCash)')+n('loadcost','Ibinawas sa GCash ko (halaga ng load)')
-    +`<div class="sm mute" style="margin-top:6px">Kita sa load = cash na tinanggap bawas ang ibinawas sa GCash.</div>`;
-  return n('stock','Pambili ng stock (bayad agad, hindi utang)')+n('gstock','Magkano doon ang binayad via GCash?')
-    +`<div class="sub">Ibang gastos NG STORE (hindi personal)</div>`+n('opex','Kuryente ng tindahan, pamasahe sa deliver, atbp.')+n('gopex','Magkano doon ang binayad via GCash?');
+  const grp=(nm,title,hint,inner,open)=>`<details class="grp" name="${nm}"${open?' open':''}><summary><span>${title}</span><i class="sm mute">${hint}</i></summary><div class="gin">${inner}</div></details>`;
+  if(t==='gcash')return `<div class="sm mute" style="margin:2px 0 8px">Pumili ng ginawa mo, tapos punan lang ang kailangan.</div>`
+    +grp('g','💳 Customer nagbayad via GCash','walang charge',n('gsales','Halaga na binayad via GCash (kasama na sa Total na benta)')+`<div class="sm mute">Ililipat lang nito ang halaga mula sa Cash papunta sa GCash wallet. Hindi nito dinadagdagan ang benta.</div>`)
+    +grp('g','⬆️ Cash-in','nag-send ako, customer nag-abot ng cash',n('cashin','Halaga na na-send ko')+n('fee','Fee (cash na pumasok)')+`<div class="sm mute">Ang cash na tinanggap (halaga + fee) ay mapupunta sa 🧰 Pera ng GCash, hindi sa Cash ng store.</div>`)
+    +grp('g','⬇️ Cash-out','customer nag-send, ako nag-abot ng cash',n('cashout','Halaga ng cash-out')+n('cofee','Fee')+`<label>Paano ang fee?</label><select name="feemode"><option value="incl">Ibabawas sa aabutin (aabutin = halaga − fee)</option><option value="extra">Dagdag ng customer sa send (aabutin = halaga)</option></select><div class="sm mute" style="margin-top:6px">Ang aabutin ay kukunin sa Cash ng store. Ang fee ay kita sa GCash.</div>`)
+    +grp('g','📲 Load','nag-load gamit ang GCash',n('loadsale','Cash na tinanggap sa customer (mapupunta sa Pera ng GCash)')+n('loadcost','Ibinawas sa GCash ko (halaga ng load)')+`<div class="sm mute" style="margin-top:6px">Kita sa load = cash na tinanggap bawas ang ibinawas sa GCash.</div>`);
+  return grp('x','📦 Stock','bayad agad, hindi utang',n('stock','Pambili ng stock (bayad agad, hindi utang)')+n('gstock','Magkano doon ang binayad via GCash?'),true)
+    +grp('x','🧾 Ibang gastos ng store','hindi personal',n('opex','Kuryente ng tindahan, pamasahe sa deliver, atbp.')+n('gopex','Magkano doon ang binayad via GCash?'));
 }
 function dayLabel(d){
   const t=todayStr();
@@ -426,12 +436,14 @@ function entryInfo(l,T){
 }
 function entriesCard(T){
   const title={benta:'Benta',gastos:'Gastos',gcash:'GCash'}[T];
-  const rows=S.log.map(l=>({l,i:entryInfo(l,T)})).filter(x=>x.i.has).sort((a,b)=>b.l.date.localeCompare(a.l.date)).slice(0,40);
+  const rows=S.log.map(l=>({l,i:entryInfo(l,T)})).filter(x=>x.i.has).sort((a,b)=>b.l.date.localeCompare(a.l.date)).slice(0,600);
   const groups=[];
   rows.forEach(r=>{let g=groups[groups.length-1];if(!g||g.d!==r.l.date){g={d:r.l.date,items:[],tot:0};groups.push(g);}g.items.push(r);g.tot+=r.i.amt;});
-  const html=groups.map(g=>`<div class="dayh"><span>${dayLabel(g.d)}</span><b>${T==='gcash'?'Kita ':''}${peso(g.tot)}</b></div>`
+  const N=ui.entN||3,tot=groups.length,shown=groups.slice(0,N);
+  const html=shown.map(g=>`<div class="dayh"><span>${dayLabel(g.d)}</span><b>${T==='gcash'?'Kita ':''}${peso(g.tot)}</b></div>`
     +g.items.map(r=>`<div class="ent"><div><b>${esc(r.l.notes)||title}</b>${r.i.lines.map(x=>`<div class="sm mute">${x}</div>`).join('')}</div><div class="ent-r">${r.i.amt?`<b>${peso(r.i.amt)}</b>`:''}<button class="ghost sm" data-act="editlog" data-id="${esc(r.l.id)}" aria-label="Edit">✏️</button><button class="danger sm" data-act="dellog" data-id="${esc(r.l.id)}">✕</button></div></div>`).join('')).join('');
-  return `<div class="card"><h3>Huling ${title.toLowerCase()} entries</h3>${html||'<div class="mute">Wala pa.</div>'}</div>`;
+  const more=tot>N?`<button class="ghost full" style="margin-top:10px" data-act="moreent">Ipakita pa (${tot-N} araw pa)</button>`:'',less=N>3&&tot>3?`<button class="ghost full" style="margin-top:10px" data-act="lessent">Ipakita ang huling 3 araw lang</button>`:'';
+  return `<div class="card"><h3>Huling ${title.toLowerCase()} entries</h3>${html||'<div class="mute">Wala pa.</div>'}${more}${tot<=N?less:''}</div>`;
 }
 function editLogCard(){
   const l=S.log.find(x=>x.id===ui.editLog);if(!l)return '';
@@ -448,11 +460,11 @@ function renderLog(){
   const t=todayStr(),T=ui.logType,td=S.log.filter(l=>l.date===t);
   const seg=[['benta','🛒 Benta'],['gcash','📱 GCash'],['gastos','🧾 Gastos'],['lipat','🔁 Lipat'],['ayos','⚖️ Ayos']].map(x=>`<button type="button" class="${T===x[0]?'on':''}" data-act="logtype" data-v="${x[0]}">${x[1]}</button>`).join('');
   const today=`<div class="card"><h3>Ngayong araw</h3><div class="stat"><div><span class="sm mute">Benta</span><b>${peso(sum(td,l=>+l.sales||0))}</b></div><div><span class="sm mute">Gastos</span><b>${peso(sum(td,l=>(+l.stock)+(+l.opex)))}</b></div><div><span class="sm mute">Kita GCash</span><b>${peso(sum(td,gKita))}</b></div></div></div>`;
-  const pers=T==='gastos'?`<div class="card"><h3>Personal na gastos</h3><div class="sm mute">Pagkain, pamasahe at iba pang sa iyo, hindi sa negosyo. Hindi ito kasama sa tantyang tubo ng store.</div>
+  const pers=T==='gastos'?`<div class="card"><details class="grp pers"><summary><span>🙋 Personal na gastos</span><i class="sm mute">pagkain, pamasahe, sa iyo</i></summary><div class="gin"><div class="sm mute">Hindi ito kasama sa tantyang tubo ng store.</div>
 <form id="fPers"><label>Ano ito? (optional)</label><input name="name" maxlength="80" placeholder="hal. Pamasahe, Pagkain">
 <label>Halaga</label><input type="number" name="amount" inputmode="decimal" min="0" step="any" required>
 <label>Kinuha sa</label><select name="wallet"><option>Cash</option><option>GCash</option><option>Personal</option></select>
-<button class="full">Save personal</button></form></div>`:'';
+<button class="full">Save personal</button></form></div></details></div>`:'';
   let body;
   if(T==='ayos'){
     const ops=WALS.map(x=>`<option value="${x[0]}">${x[1]}</option>`).join('');
@@ -509,7 +521,8 @@ ${e?'':`<label>Bayad na ba ngayon?</label><select name="paynow">${opt([['','Hind
   if(!open.length)lists='<div class="card"><div class="mute">Walang bayarin 🎉</div></div>';
   else if(F==='all'){
     const st=open.filter(p=>p.type!=='Personal'),pe=open.filter(p=>p.type==='Personal');
-    lists=(st.length?sec('Para sa store',st):'')+(pe.length?sec('Personal',pe):'');
+    const su=st.filter(p=>p.type==='Supplier'),ex=st.filter(p=>p.type!=='Supplier');
+    lists=(su.length?sec('Supplier (stock)',su):'')+(ex.length?sec('Gastos ng store (sweldo, upa, kuryente...)',ex):'')+(pe.length?sec('Personal',pe):'');
   }else lists=sec(F==='Personal'?'Personal':F,open);
   return `${form}<div class="card"><button class="full" style="margin:0" data-act="newbill">+ Dagdag na bayarin</button></div>
 <div class="chips">${chips}</div>${lists}
@@ -551,7 +564,9 @@ document.addEventListener('click',async ev=>{
   const el=ev.target.closest('[data-act]');if(!el)return;
   const a=el.dataset.act,id=el.dataset.id;
   if(a==='reload')return reload();
-  if(a==='logtype'){ui.logType=el.dataset.v;return render();}
+  if(a==='logtype'){ui.logType=el.dataset.v;ui.entN=3;return render();}
+  if(a==='moreent'){ui.entN=(ui.entN||3)+5;return render();}
+  if(a==='lessent'){ui.entN=3;return render();}
   if(a==='filter'){ui.filter=el.dataset.v;return render();}
   if(a==='drawer2cash'){
     const f=forecast(S.settings,S.log,S.pay,todayStr(),30,S.transfers);
