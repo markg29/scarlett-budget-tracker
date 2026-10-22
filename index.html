@@ -250,7 +250,8 @@ function dlabel(s){return new Date(utc(s)).toLocaleDateString('en-PH',{month:'sh
 function ld(k,d){try{return JSON.parse(localStorage.getItem(k))||d;}catch(e){return d;}}
 
 let cfg=API_URL?{url:API_URL,pin:API_PIN}:ld('pk_cfg',{url:'',pin:''});
-let S=ld('pk_cache',{settings:{},log:[],pay:[],transfers:[]});
+function normS(x){x=x&&typeof x==='object'?x:{};const A=v=>Array.isArray(v)?v.filter(r=>r&&typeof r==='object'):[];return{settings:x.settings&&typeof x.settings==='object'?x.settings:{},log:A(x.log),pay:A(x.pay),transfers:A(x.transfers)};}
+let S=normS(ld('pk_cache',null));
 S.transfers=S.transfers||[];
 let ui={editLog:null,bd:null,pay:null,more:null,setEdit:false,tab:'home',filter:'all',form:false,edit:null,busy:false,logType:'benta',entN:3};
 
@@ -280,7 +281,7 @@ async function api(body){
   }
   if(!j.ok)throw new Error(j.error||'May error');
   srvVer=+j.ver||1;
-  S={settings:j.settings,log:j.log,pay:j.pay,transfers:j.transfers||[]};
+  S=normS(j);
   try{localStorage.setItem('pk_cache',JSON.stringify(S));}catch(_){}
   $('#sync').textContent='Synced '+new Date().toLocaleTimeString('en-PH',{hour:'2-digit',minute:'2-digit'});
   return j;
@@ -307,8 +308,9 @@ async function run(body,okMsg){
 async function reload(){
   if(!cfg.url){$('#sync').textContent='Walang URL pa';render();return;}
   $('#sync').textContent='Naglo-load...';$('#topbar').classList.add('on');
+  const slow=setTimeout(()=>{$('#sync').textContent='Mabagal ang Google, sandali pa...';},8000);
   try{await api({action:'getAll'});}catch(e){$('#sync').textContent='Offline (lumang data)';toast('⚠️ '+e.message,'err');}
-  $('#topbar').classList.remove('on');
+  clearTimeout(slow);$('#topbar').classList.remove('on');
   render();
 }
 
@@ -555,7 +557,8 @@ function render(){
   document.querySelectorAll('#nav button').forEach(b=>b.classList.toggle('on',b.dataset.tab===ui.tab));
   const y=window.scrollY;
   const warn=srvVer!==null&&srvVer<NEED_VER?`<div class="banner warn">⚠️ Luma pa ang Code.gs mo (v${srvVer}, kailangan v${NEED_VER}). Gagana ang karamihan, pero may mga bagong feature na hindi pa gagana. I-paste ang bagong Code.gs sa Apps Script, tapos <b>Deploy → Manage deployments → Edit → New version → Deploy</b>.</div>`:'';
-  $('#app').innerHTML=warn+(ui.tab==='home'?renderHome():ui.tab==='log'?renderLog():ui.tab==='bills'?renderBills():renderSet());
+  try{$('#app').innerHTML=warn+(ui.tab==='home'?renderHome():ui.tab==='log'?renderLog():ui.tab==='bills'?renderBills():renderSet());}
+  catch(e){console.error(e);$('#app').innerHTML='<div class="card"><h3>May problema sa pagpapakita</h3><div class="sm mute">Hindi nawala ang data mo sa Google Sheet. Pindutin ang button para i-clear ang naka-save na kopya sa phone at mag-load ulit.</div><button class="full" style="margin-top:10px" data-act="resetcache">I-reset at mag-load ulit</button><div class="sm mute" style="margin-top:8px">'+esc(String(e&&e.message||e))+'</div></div>';}
   window.scrollTo(0,y);
   updAdj();
 }
@@ -566,6 +569,7 @@ document.addEventListener('click',async ev=>{
   const el=ev.target.closest('[data-act]');if(!el)return;
   const a=el.dataset.act,id=el.dataset.id;
   if(a==='reload')return reload();
+  if(a==='resetcache'){try{localStorage.removeItem('pk_cache');}catch(_){}location.reload();return;}
   if(a==='logtype'){ui.logType=el.dataset.v;ui.entN=3;return render();}
   if(a==='moreent'){ui.entN=(ui.entN||3)+5;return render();}
   if(a==='lessent'){ui.entN=3;return render();}
