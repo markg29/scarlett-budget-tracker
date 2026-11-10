@@ -1,6 +1,7 @@
 <!DOCTYPE html>
 <html lang="tl">
 <head>
+<meta http-equiv="Cache-Control" content="no-cache, must-revalidate">
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <meta name="theme-color" content="#eef2e6">
@@ -26,7 +27,7 @@ main{padding:14px 14px 4px;max-width:560px;margin:0 auto}
 .row:last-child{border-bottom:0}
 .mute{color:var(--mute)}.sm{font-size:12.5px}
 .neg{color:var(--bad)}.pos{color:var(--ok)}
-.chatf{display:flex;gap:8px}.chatf textarea{flex:1;min-width:0;resize:vertical;font:inherit}.chatf button{flex:none}.chatr{margin-top:12px;background:var(--soft);border-radius:16px;padding:12px 14px}.chatr .row:last-of-type{border-bottom:0}.chaterr{margin-top:8px;color:var(--bad);font-size:14px}.chaterr div{margin-top:4px}
+#fChat textarea{width:100%;resize:none;overflow:hidden;font:inherit;line-height:1.35;padding:10px 12px;border-radius:14px}.chatl{display:block;font-weight:800;margin:0 0 8px}.chatbar{display:flex;align-items:flex-start;justify-content:space-between;gap:10px;margin-top:8px}.chathelp summary{cursor:pointer;font-size:13px;color:var(--mute,#8a7a68);list-style:none}.chathelp summary::-webkit-details-marker{display:none}.chathelp .sm{margin-top:6px;line-height:1.6}.chatbar button{flex:none;min-width:84px}.chatc{margin-bottom:12px}.chatr{margin-top:12px;background:var(--soft);border-radius:16px;padding:12px 14px}.chatr .row:last-of-type{border-bottom:0}.chaterr{margin-top:8px;color:var(--bad);font-size:14px}.chaterr div{margin-top:4px}
 .banner{border-radius:18px;padding:12px 14px;margin-bottom:14px;font-weight:700}
 .banner.ok{background:var(--okbg);color:var(--ok)}.banner.warn{background:var(--warnbg);color:var(--warn)}.banner.bad{background:var(--badbg);color:var(--bad)}
 label{display:block;font-size:13px;font-weight:700;color:var(--fur-d);margin:12px 0 4px}
@@ -114,7 +115,7 @@ main,.card,.bubble{overflow-wrap:anywhere;word-break:break-word}.item>div,.ent>d
 // ====== ISANG BESES LANG: i-paste dito ang Apps Script URL (nagtatapos sa /exec) ======
 const API_URL='https://script.google.com/macros/s/AKfycbyqsMv_r7FbAmSJWvGhMFmHh177hiO2KS6onWPpFovH_HbmoizYhLB2bfHjetTDthIJfA/exec';
 const API_PIN='';
-const NEED_VER=10;   // pinakabagong bersyon ng Code.gs na kailangan ng app na ito
+const NEED_VER=10;const BUILD='nov10-chat-sa-transaksyon';   // pinakabagong bersyon ng Code.gs na kailangan ng app na ito
 const USER_NAME='Mark';   // pangalan na babatiin ni Kapi   // kung may PIN sa Code.gs, ilagay din dito
 // =======================================================================================
 //#LOGIC-START
@@ -427,12 +428,7 @@ function renderHome(){
     if(m.storeNet<0)verdict='Mas malaki ang labas kesa pasok sa mismong store ngayong buwan.';
     else verdict='Positibo ang store ngayong buwan 👍';
   }
-  const ch=ui.chat?(ui.chat.err?`<div class="chatr">${ui.chat.err}</div>`:`<div class="chatr">${ui.chat.items.length?'<b>'+(ui.chat.errors.length?'Naintindihan ko:':'Ito ba? (magkakahiwalay na entry)')+'</b>'+ui.chat.items.map(i=>`<div class="row"><span>${esc(i.t)}${i.d?` <span class="mute sm">${esc(i.d)}</span>`:''}${i.date!==t?` <span class="mute sm">· ${dlabel(i.date)}</span>`:''}</span><b>${peso(i.amt)}</b></div>`).join(''):''}${ui.chat.errors.length?'<div class="chaterr"><b>⚠️ Hindi ko ma-save, may mali:</b>'+ui.chat.errors.map(e=>'<div>'+esc(e)+'</div>').join('')+'<div class="sm mute" style="margin-top:6px">Ayusin ang mensahe at i-send ulit. Wala pang na-save.</div></div><div class="acts"><button class="ghost sm" data-act="chatno">Isara</button></div>':'<div class="acts"><button class="sm" data-act="chatok">Oo, i-save lahat</button><button class="ghost sm" data-act="chatno">Hindi</button></div>'}</div>`):'';
-  const chat=`<div class="card"><h3>💬 Sabihin kay Kapi</h3><form id="fChat" class="chatf"><textarea name="msg" rows="3" maxlength="600" placeholder="Isang entry kada linya:
-stock 2000
-cashin 1000 fee 20
-benta 9000" required></textarea><button class="sm">Send</button></form><div class="sm mute" style="margin-top:6px">Mga halimbawa: <i>gas 500</i> · <i>stock 12k gcash</i> · <i>benta 9000</i> · <i>cashin 1000 fee 20</i> · <i>cashout 2000 fee 40</i> · <i>load 105 100</i> · <i>kahapon gas 300</i><br>Isang linya kada entry (Enter para sa bagong linya). Magkakahiwalay silang masi-save.</div>${ch}</div>`;
-  return `${hello}${mascot}${chat}<div class="card"><h3>Kabuuang pera</h3><div class="big ${cls(f.cash0)}">${peso(f.cash0)}</div>
+  return `${hello}${mascot}<div class="card"><h3>Kabuuang pera</h3><div class="big ${cls(f.cash0)}">${peso(f.cash0)}</div>
 <div class="grid2" style="margin:12px 0"><div class="tile c" data-act="bd" data-v="cash" role="button" tabindex="0"><div class="sm mute"><i class="ic"></i>Cash</div><b class="${cls(f.cash)}">${peso(f.cash)}</b></div><div class="tile g" data-act="bd" data-v="gcash" role="button" tabindex="0"><div class="sm mute"><i class="ic"></i>GCash</div><b class="${cls(f.gcash)}">${peso(f.gcash)}</b></div><div class="tile d" data-act="bd" data-v="drawer" role="button" tabindex="0"><div class="sm mute"><i class="ic"></i>Pera ng GCash</div><b class="${cls(f.drawer)}">${peso(f.drawer)}</b></div><div class="tile h" data-act="bd" data-v="huling" role="button" tabindex="0"><div class="sm mute"><i class="ic"></i>Huling Benta</div><b class="${cls(f.huling)}">${peso(f.huling)}</b></div><div class="tile p"><div class="sm mute"><i class="ic"></i>Personal</div><b class="${cls(f.personal)}">${peso(f.personal)}</b></div><div class="tile b"><div class="sm mute"><i class="ic"></i>Barya</div><b class="${cls(f.barya)}">${peso(f.barya)}</b></div><div class="tile u" data-act="bd" data-v="utang" role="button" tabindex="0" style="grid-column:1/-1"><div class="sm mute"><i class="ic"></i>Utang ng iba <span class="mute">(hindi kasama sa kabuuan)</span></div><b>${peso(f.utang)}</b></div></div>
 ${ui.bd?`<div class="bdbox"><b>Paano nabuo ang ${ui.bd==='gcash'?'GCash':ui.bd==='drawer'?'Pera ng GCash':ui.bd==='huling'?'Huling Benta':ui.bd==='utang'?'Utang ng iba':'Cash'}</b>${breakdown(S.settings,S.log,S.pay,S.transfers,ui.bd).map(x=>`<div class="row"><span>${x[0]}</span><span class="${x[1]<0?'neg':''}">${x[1]<0?'−':''}${peso(Math.abs(x[1]))}</span></div>`).join('')}<div class="row"><b>Kabuuan</b><b>${peso(ui.bd==='gcash'?f.gcash:ui.bd==='drawer'?f.drawer:ui.bd==='huling'?f.huling:ui.bd==='utang'?f.utang:f.cash)}</b></div><div class="sm mute">Kung may mali, hanapin dito kung alin ang sobra o kulang, tapos burahin o ayusin ang entry.</div>${ui.bd==='drawer'&&f.drawer>0?`<button class="full" style="margin-top:10px" data-act="drawer2cash">Ilipat ang ${peso(f.drawer)} sa Cash</button>`:''}</div>`:''}
 <div class="sm mute">Pwede mong kunin (personal) bukod sa nakalistang bayarin: <b>${peso(f.safe)}</b></div></div>
@@ -515,6 +511,11 @@ ${n('sales','Total na benta (POS)')}${n('gsales','Binayad via GCash (kasama sa b
 <label>Note</label><input name="notes" maxlength="200" value="${esc(l.notes)}">
 <div class="grid2"><button class="full">I-save</button><button type="button" class="ghost full" data-act="canceleditlog">Kansel</button></div></form></div>`;
 }
+function chatCard(){
+  const t=todayStr();
+  const ch=ui.chat?(ui.chat.err?`<div class="chatr">${ui.chat.err}</div>`:`<div class="chatr">${ui.chat.items.length?'<b>'+(ui.chat.errors.length?'Naintindihan ko:':'Ito ba? (magkakahiwalay na entry)')+'</b>'+ui.chat.items.map(i=>`<div class="row"><span>${esc(i.t)}${i.d?` <span class="mute sm">${esc(i.d)}</span>`:''}${i.date!==t?` <span class="mute sm">· ${dlabel(i.date)}</span>`:''}</span><b>${peso(i.amt)}</b></div>`).join(''):''}${ui.chat.errors.length?'<div class="chaterr"><b>⚠️ Hindi ko ma-save, may mali:</b>'+ui.chat.errors.map(e=>'<div>'+esc(e)+'</div>').join('')+'<div class="sm mute" style="margin-top:6px">Ayusin ang mensahe at i-send ulit. Wala pang na-save.</div></div><div class="acts"><button class="ghost sm" data-act="chatno">Isara</button></div>':'<div class="acts"><button class="sm" data-act="chatok">Oo, i-save lahat</button><button class="ghost sm" data-act="chatno">Hindi</button></div>'}</div>`):'';
+  return `<div class="card chatc"><form id="fChat"><label class="chatl" for="chatmsg">💬 Sabihin kay Kapi</label><textarea id="chatmsg" name="msg" rows="2" maxlength="600" placeholder="gas 500&#10;stock 2000&#10;cashin 1000 fee 20" required></textarea><div class="chatbar"><details class="chathelp"><summary>Mga halimbawa</summary><div class="sm mute">Isang entry kada linya, magkakahiwalay silang masi-save.<br><i>gas 500</i> · <i>stock 12k gcash</i> · <i>benta 9000</i><br><i>cashin 1000 fee 20</i> · <i>cashout 2000 fee 40</i><br><i>load 105 100</i> · <i>kahapon gas 300</i></div></details><button class="sm">Send</button></div></form>${ch}</div>`;
+}
 function renderLog(){
   if(ui.editLog&&S.log.some(x=>x.id===ui.editLog))return editLogCard();
   const t=todayStr(),T=ui.logType,td=S.log.filter(l=>l.date===t);
@@ -544,7 +545,7 @@ function renderLog(){
 ${pers}
 ${entriesCard(T)}`;
   }
-  return `<div class="seg">${seg}</div>${T==='lipat'?'':today}${body}`;
+  return `${chatCard()}<div class="seg">${seg}</div>${T==='lipat'?'':today}${body}`;
 }
 
 function renderBills(){
@@ -594,7 +595,7 @@ function renderSet(){
   const F=[['opening_cash','Panimulang Cash','Cash na hawak mo nung nagsimula ka mag-log'],['opening_gcash','Panimulang GCash','Balance ng GCash wallet nung nagsimula ka'],['opening_drawer','Panimulang Pera ng GCash','Cash sa drawer ng cash-in at load'],['opening_huling','Panimulang Huling Benta','Perang iniwan mo sa store bilang huling benta'],['opening_utang','Panimulang Utang ng iba','Total na utang sa iyo nung nagsimula ka (hindi kasama sa Kabuuang pera)'],['opening_personal','Panimulang Personal','Pera na pang-sarili mo'],['opening_barya','Panimulang Barya','Coins ng store, hiwalay sa Pondo'],['margin_pct','Margin ng tubo (%)','Tantya ng tubo sa benta'],['buffer','Buffer','Pinakamababang pera na gusto mong laging may natitira']];
   if(!ui.setEdit)return conn+`<div class="card"><h3>Pera</h3>${F.map(f=>`<div class="row"><span>${f[1]}<div class="sm mute">${f[2]}</div></span><b>${f[0]==='margin_pct'?(+s[f[0]]||0)+'%':peso(+s[f[0]]||0)}</b></div>`).join('')}
 <button class="ghost full" data-act="setedit">✏️ Baguhin</button></div>`;
-  return conn+`<div class="card"><h3>Baguhin ang Settings</h3><div class="banner warn">Baguhin lang ito kung sigurado ka. Apektado ang lahat ng balance at forecast.</div><form id="fSet">
+  return conn+`<div class="sm mute" style="margin:0 4px 10px">Bersyon ng app: ${BUILD}</div><div class="card"><h3>Baguhin ang Settings</h3><div class="banner warn">Baguhin lang ito kung sigurado ka. Apektado ang lahat ng balance at forecast.</div><form id="fSet">
 ${F.map(f=>`<label>${f[1]} <span class="mute sm">· ${f[2]}</span></label><input type="number" name="${f[0]}" inputmode="decimal" step="any" value="${+s[f[0]]||0}">`).join('')}
 <div class="grid2"><button class="full">I-save</button><button type="button" class="ghost full" data-act="setcancel">Kansel</button></div></form></div>`;
 }
@@ -665,6 +666,7 @@ document.addEventListener('input',ev=>{
   }
 });
 
+document.addEventListener('input',ev=>{const e=ev.target;if(e&&e.id==='chatmsg'){e.style.height='auto';e.style.height=Math.min(e.scrollHeight,160)+'px';}});
 document.addEventListener('submit',async ev=>{
   ev.preventDefault();
   const f=ev.target,d=Object.fromEntries(new FormData(f));
