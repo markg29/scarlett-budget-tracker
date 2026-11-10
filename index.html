@@ -26,6 +26,7 @@ main{padding:14px 14px 4px;max-width:560px;margin:0 auto}
 .row:last-child{border-bottom:0}
 .mute{color:var(--mute)}.sm{font-size:12.5px}
 .neg{color:var(--bad)}.pos{color:var(--ok)}
+.chatf{display:flex;gap:8px}.chatf textarea{flex:1;min-width:0;resize:vertical;font:inherit}.chatf button{flex:none}.chatr{margin-top:12px;background:var(--soft);border-radius:16px;padding:12px 14px}.chatr .row:last-of-type{border-bottom:0}.chaterr{margin-top:8px;color:var(--bad);font-size:14px}.chaterr div{margin-top:4px}
 .banner{border-radius:18px;padding:12px 14px;margin-bottom:14px;font-weight:700}
 .banner.ok{background:var(--okbg);color:var(--ok)}.banner.warn{background:var(--warnbg);color:var(--warn)}.banner.bad{background:var(--badbg);color:var(--bad)}
 label{display:block;font-size:13px;font-weight:700;color:var(--fur-d);margin:12px 0 4px}
@@ -233,6 +234,50 @@ function monthSummary(st,log,pay,ym){
   return{sales,fee,feeIn,feeOut,loadP,stock,opex,sup,staff,store,pers,storeOut,storeNet,totalNet:storeNet-pers,
     estProfit:sales*((+st.margin_pct||0)/100)+fee-opex-staff-store};
 }
+
+function chatNum(t){const n=parseFloat(String(t).replace(/,/g,''));return/k\s*$/i.test(String(t))?Math.round(n*1000*100)/100:n;}
+const pf=n=>'₱'+(Math.round(n*100)/100).toLocaleString('en-PH');
+function chatLev(a,b){const m=[];for(let i=0;i<=a.length;i++){m[i]=[i];}for(let j=0;j<=b.length;j++)m[0][j]=j;for(let i=1;i<=a.length;i++)for(let j=1;j<=b.length;j++)m[i][j]=Math.min(m[i-1][j]+1,m[i][j-1]+1,m[i-1][j-1]+(a[i-1]===b[j-1]?0:1));return m[a.length][b.length];}
+const CHAT_KW=['benta','stock','cashin','cashout','load','gastos','gas'];
+function parseChat(text,today){
+  const T=String(text||'').replace(/(\d),(?=\d{3}(?!\d))/g,'$1').replace(/₱|php|piso/gi,' ');
+  const entries=[],errors=[];let dflt=today;
+  const NUM=/(\d+(?:\.\d+)?)\s*(k\b)?/gi;
+  T.split(/[\n;]+|,\s*|\s\+\s/).forEach(raw=>{
+    const part=raw.trim();if(!part)return;
+    const lower=part.toLowerCase();
+    const day=/\bkahapon\b/.test(lower)?addDays(today,-1):null;
+    const nums=[...lower.matchAll(NUM)].map(m=>chatNum(m[1]+(m[2]?'k':'')));
+    const words=lower.replace(NUM,' ').replace(/\b(kahapon|ngayon)\b/g,' ').replace(/\s+/g,' ').trim();
+    if(!nums.length&&!words){if(day)dflt=day;return;}
+    if(!nums.length&&/^(kahapon|ngayon)$/.test(words)){if(day)dflt=day;return;}
+    if(!nums.length){errors.push('"'+part+'": walang halaga.');return;}
+    const date=day||dflt;
+    const fm=lower.match(/\b(?:fee|charge|kita)\s*[:=]?\s*(\d+(?:\.\d+)?)\s*(k\b)?/);
+    const fee=fm?chatNum(fm[1]+(fm[2]?'k':'')):0;
+    const a=nums[0],viaG=/\bg-?cash\b/.test(words);
+    const rest=words.replace(/\b(fee|charge|kita|g-?cash)\b/g,' ').replace(/\s+/g,' ').trim();
+    const F={},add=(k,v)=>{F[k]=Math.round(((+F[k]||0)+v)*100)/100;};let item=null,note='';
+    const tok=rest.split(' ').filter(Boolean);
+    const KW=[/\b(benta|sales?)\b/,/\bstock\b/,/\bcash[\s-]?in\b/,/\bcash[\s-]?out\b/,/\bload\b/,/\b(gastos|gas|expenses?|opex|exp)\b/].filter(re=>re.test(rest)).length;
+    if(KW>1){errors.push('"'+part+'": dalawang uri ang nasa isang linya. Isang entry kada linya.');return;}
+    const has=re=>re.test(rest);
+    const strip=re=>rest.replace(re,' ').replace(/\s+/g,' ').trim();
+    if(has(/\b(benta|sales?)\b/)){add('sales',a);note=strip(/\b(benta|sales?)\b/);item={t:'Benta',d:note,amt:a};}
+    else if(has(/\bstock\b/)){add('stock',a);if(viaG)add('gstock',a);note=strip(/\bstock\b/);item={t:'Stock'+(viaG?' (GCash)':''),d:note,amt:a};}
+    else if(has(/\bcash[\s-]?in\b/)){add('cashin',a);if(fee)add('fee',fee);note=strip(/\bcash[\s-]?in\b/);item={t:'Cash-in',d:fee?'fee '+pf(fee):'',amt:a};}
+    else if(has(/\bcash[\s-]?out\b/)){if(fee>=a){errors.push('"'+part+'": mas malaki ang fee kesa sa cash-out.');return;}add('cashout',a-fee);if(fee)add('cofee',fee);note=strip(/\bcash[\s-]?out\b/);item={t:'Cash-out',d:fee?'fee '+pf(fee)+' · aabutin '+pf(a-fee):'',amt:a};}
+    else if(has(/\bload\b/)){const c=nums[1]!==undefined?nums[1]:a;add('loadsale',a);add('loadcost',c);note=strip(/\bload\b/);item={t:'Load',d:'kita '+pf(a-c),amt:a};}
+    else if(has(/\b(gastos|gas|expenses?|opex|exp)\b/)){add('opex',a);if(viaG)add('gopex',a);note=strip(/\b(gastos|gas|expenses?|opex|exp)\b/)||(tok.includes('gas')?'gas':'gastos');item={t:'Ibang gastos'+(viaG?' (GCash)':''),d:note,amt:a};}
+    else{
+      let best=null;tok.forEach(w=>CHAT_KW.forEach(k=>{const dd=chatLev(w,k);if(dd<=2&&w.length>=3&&(!best||dd<best.d))best={w,k,d:dd};}));
+      errors.push('"'+part+'": hindi ko kilala ang '+(best?'"'+best.w+'". Ibig mo bang sabihin "'+best.k+'"?':'"'+(tok[0]||part)+'". Gamitin ang: benta, stock, cashin, cashout, load, o gastos.'));return;
+    }
+    entries.push({date,fields:F,notes:note,item});
+  });
+  const fields={};entries.forEach(e=>Object.keys(e.fields).forEach(k=>{fields[k]=Math.round(((+fields[k]||0)+e.fields[k])*100)/100;}));
+  return{entries,items:entries.map(e=>Object.assign({date:e.date},e.item)),errors,fields,notes:entries.map(e=>e.notes).filter(Boolean).join(', '),date:entries[0]?entries[0].date:today};
+}
 //#LOGIC-END
 
 const WL={Drawer:'Pera ng GCash',Huling:'Huling Benta',Utang:'Utang ng iba',Adjust:'Ayos'};
@@ -253,7 +298,7 @@ let cfg=API_URL?{url:API_URL,pin:API_PIN}:ld('pk_cfg',{url:'',pin:''});
 function normS(x){x=x&&typeof x==='object'?x:{};const A=v=>Array.isArray(v)?v.filter(r=>r&&typeof r==='object'):[];return{settings:x.settings&&typeof x.settings==='object'?x.settings:{},log:A(x.log),pay:A(x.pay),transfers:A(x.transfers)};}
 let S=normS(ld('pk_cache',null));
 S.transfers=S.transfers||[];
-let ui={editLog:null,bd:null,pay:null,more:null,setEdit:false,tab:'home',filter:'all',form:false,edit:null,busy:false,logType:'benta',entN:3};
+let ui={editLog:null,bd:null,pay:null,more:null,setEdit:false,tab:'home',filter:'all',form:false,edit:null,busy:false,logType:'benta',entN:3,emptyWarn:false,chat:null};
 
 function toast(m,kind){const t=$('#toast');t.textContent=m;t.className=kind||'';t.style.display='block';clearTimeout(toast.t);toast.t=setTimeout(()=>t.style.display='none',kind==='err'?6000:3000);
   try{if(navigator.vibrate)navigator.vibrate(kind==='err'?[60,40,60]:30);}catch(e){}}
@@ -281,7 +326,9 @@ async function api(body){
   }
   if(!j.ok)throw new Error(j.error||'May error');
   srvVer=+j.ver||1;
-  S=normS(j);
+  const nx=normS(j),had=S.log.length+S.pay.length+S.transfers.length,has=nx.log.length+nx.pay.length+nx.transfers.length;
+  if(body.action==='getAll'&&had>0&&has===0){ui.emptyWarn=true;$('#sync').textContent='⚠️ Walang laman ang Sheet';return j;} // huwag burahin ang kopya sa phone
+  ui.emptyWarn=false;S=nx;
   try{localStorage.setItem('pk_cache',JSON.stringify(S));}catch(_){}
   $('#sync').textContent='Synced '+new Date().toLocaleTimeString('en-PH',{hour:'2-digit',minute:'2-digit'});
   return j;
@@ -380,7 +427,12 @@ function renderHome(){
     if(m.storeNet<0)verdict='Mas malaki ang labas kesa pasok sa mismong store ngayong buwan.';
     else verdict='Positibo ang store ngayong buwan 👍';
   }
-  return `${hello}${mascot}<div class="card"><h3>Kabuuang pera</h3><div class="big ${cls(f.cash0)}">${peso(f.cash0)}</div>
+  const ch=ui.chat?(ui.chat.err?`<div class="chatr">${ui.chat.err}</div>`:`<div class="chatr">${ui.chat.items.length?'<b>'+(ui.chat.errors.length?'Naintindihan ko:':'Ito ba? (magkakahiwalay na entry)')+'</b>'+ui.chat.items.map(i=>`<div class="row"><span>${esc(i.t)}${i.d?` <span class="mute sm">${esc(i.d)}</span>`:''}${i.date!==t?` <span class="mute sm">· ${dlabel(i.date)}</span>`:''}</span><b>${peso(i.amt)}</b></div>`).join(''):''}${ui.chat.errors.length?'<div class="chaterr"><b>⚠️ Hindi ko ma-save, may mali:</b>'+ui.chat.errors.map(e=>'<div>'+esc(e)+'</div>').join('')+'<div class="sm mute" style="margin-top:6px">Ayusin ang mensahe at i-send ulit. Wala pang na-save.</div></div><div class="acts"><button class="ghost sm" data-act="chatno">Isara</button></div>':'<div class="acts"><button class="sm" data-act="chatok">Oo, i-save lahat</button><button class="ghost sm" data-act="chatno">Hindi</button></div>'}</div>`):'';
+  const chat=`<div class="card"><h3>💬 Sabihin kay Kapi</h3><form id="fChat" class="chatf"><textarea name="msg" rows="3" maxlength="600" placeholder="Isang entry kada linya:
+stock 2000
+cashin 1000 fee 20
+benta 9000" required></textarea><button class="sm">Send</button></form><div class="sm mute" style="margin-top:6px">Mga halimbawa: <i>gas 500</i> · <i>stock 12k gcash</i> · <i>benta 9000</i> · <i>cashin 1000 fee 20</i> · <i>cashout 2000 fee 40</i> · <i>load 105 100</i> · <i>kahapon gas 300</i><br>Isang linya kada entry (Enter para sa bagong linya). Magkakahiwalay silang masi-save.</div>${ch}</div>`;
+  return `${hello}${mascot}${chat}<div class="card"><h3>Kabuuang pera</h3><div class="big ${cls(f.cash0)}">${peso(f.cash0)}</div>
 <div class="grid2" style="margin:12px 0"><div class="tile c" data-act="bd" data-v="cash" role="button" tabindex="0"><div class="sm mute"><i class="ic"></i>Cash</div><b class="${cls(f.cash)}">${peso(f.cash)}</b></div><div class="tile g" data-act="bd" data-v="gcash" role="button" tabindex="0"><div class="sm mute"><i class="ic"></i>GCash</div><b class="${cls(f.gcash)}">${peso(f.gcash)}</b></div><div class="tile d" data-act="bd" data-v="drawer" role="button" tabindex="0"><div class="sm mute"><i class="ic"></i>Pera ng GCash</div><b class="${cls(f.drawer)}">${peso(f.drawer)}</b></div><div class="tile h" data-act="bd" data-v="huling" role="button" tabindex="0"><div class="sm mute"><i class="ic"></i>Huling Benta</div><b class="${cls(f.huling)}">${peso(f.huling)}</b></div><div class="tile p"><div class="sm mute"><i class="ic"></i>Personal</div><b class="${cls(f.personal)}">${peso(f.personal)}</b></div><div class="tile b"><div class="sm mute"><i class="ic"></i>Barya</div><b class="${cls(f.barya)}">${peso(f.barya)}</b></div><div class="tile u" data-act="bd" data-v="utang" role="button" tabindex="0" style="grid-column:1/-1"><div class="sm mute"><i class="ic"></i>Utang ng iba <span class="mute">(hindi kasama sa kabuuan)</span></div><b>${peso(f.utang)}</b></div></div>
 ${ui.bd?`<div class="bdbox"><b>Paano nabuo ang ${ui.bd==='gcash'?'GCash':ui.bd==='drawer'?'Pera ng GCash':ui.bd==='huling'?'Huling Benta':ui.bd==='utang'?'Utang ng iba':'Cash'}</b>${breakdown(S.settings,S.log,S.pay,S.transfers,ui.bd).map(x=>`<div class="row"><span>${x[0]}</span><span class="${x[1]<0?'neg':''}">${x[1]<0?'−':''}${peso(Math.abs(x[1]))}</span></div>`).join('')}<div class="row"><b>Kabuuan</b><b>${peso(ui.bd==='gcash'?f.gcash:ui.bd==='drawer'?f.drawer:ui.bd==='huling'?f.huling:ui.bd==='utang'?f.utang:f.cash)}</b></div><div class="sm mute">Kung may mali, hanapin dito kung alin ang sobra o kulang, tapos burahin o ayusin ang entry.</div>${ui.bd==='drawer'&&f.drawer>0?`<button class="full" style="margin-top:10px" data-act="drawer2cash">Ilipat ang ${peso(f.drawer)} sa Cash</button>`:''}</div>`:''}
 <div class="sm mute">Pwede mong kunin (personal) bukod sa nakalistang bayarin: <b>${peso(f.safe)}</b></div></div>
@@ -557,7 +609,8 @@ function render(){
   document.querySelectorAll('#nav button').forEach(b=>b.classList.toggle('on',b.dataset.tab===ui.tab));
   const y=window.scrollY;
   const warn=srvVer!==null&&srvVer<NEED_VER?`<div class="banner warn">⚠️ Luma pa ang Code.gs mo (v${srvVer}, kailangan v${NEED_VER}). Gagana ang karamihan, pero may mga bagong feature na hindi pa gagana. I-paste ang bagong Code.gs sa Apps Script, tapos <b>Deploy → Manage deployments → Edit → New version → Deploy</b>.</div>`:'';
-  try{$('#app').innerHTML=warn+(ui.tab==='home'?renderHome():ui.tab==='log'?renderLog():ui.tab==='bills'?renderBills():renderSet());}
+  const ew=ui.emptyWarn?'<div class="banner warn">⚠️ Walang laman ang Google Sheet na nakakonekta, pero may data sa phone mo. Hindi ko binura ang kopya. Tingnan kung tamang Sheet at Apps Script deployment ang gamit (Settings → URL). <button class="ghost sm" data-act="acceptempty">Tanggapin na walang laman</button></div>':'';
+  try{$('#app').innerHTML=ew+warn+(ui.tab==='home'?renderHome():ui.tab==='log'?renderLog():ui.tab==='bills'?renderBills():renderSet());}
   catch(e){console.error(e);$('#app').innerHTML='<div class="card"><h3>May problema sa pagpapakita</h3><div class="sm mute">Hindi nawala ang data mo sa Google Sheet. Pindutin ang button para i-clear ang naka-save na kopya sa phone at mag-load ulit.</div><button class="full" style="margin-top:10px" data-act="resetcache">I-reset at mag-load ulit</button><div class="sm mute" style="margin-top:8px">'+esc(String(e&&e.message||e))+'</div></div>';}
   window.scrollTo(0,y);
   updAdj();
@@ -569,6 +622,9 @@ document.addEventListener('click',async ev=>{
   const el=ev.target.closest('[data-act]');if(!el)return;
   const a=el.dataset.act,id=el.dataset.id;
   if(a==='reload')return reload();
+  if(a==='acceptempty'){S={settings:{},log:[],pay:[],transfers:[]};ui.emptyWarn=false;try{localStorage.setItem('pk_cache',JSON.stringify(S));}catch(_){}return render();}
+  if(a==='chatno'){ui.chat=null;return render();}
+  if(a==='chatok'&&ui.chat&&ui.chat.entries&&!ui.chat.errors.length){const c=ui.chat;let n=0;while(c.entries.length){const e=c.entries[0],F=e.fields;const ok=await run({action:'addLog',date:e.date,sales:F.sales,stock:F.stock,opex:F.opex,cashin:F.cashin,cashout:F.cashout,fee:F.fee,cofee:F.cofee,gsales:0,loadsale:F.loadsale,loadcost:F.loadcost,gstock:F.gstock,gopex:F.gopex,notes:e.notes},c.entries.length===1?(n+1)+' entry ang na-save ni Kapi ✓':undefined);if(!ok){c.items=c.entries.map(x=>Object.assign({date:x.date},x.item));render();return;}c.entries.shift();n++;}ui.chat=null;render();return;}
   if(a==='resetcache'){try{localStorage.removeItem('pk_cache');}catch(_){}location.reload();return;}
   if(a==='logtype'){ui.logType=el.dataset.v;ui.entN=3;return render();}
   if(a==='moreent'){ui.entN=(ui.entN||3)+5;return render();}
@@ -612,7 +668,11 @@ document.addEventListener('input',ev=>{
 document.addEventListener('submit',async ev=>{
   ev.preventDefault();
   const f=ev.target,d=Object.fromEntries(new FormData(f));
-  if(f.id==='fLog'){
+  if(f.id==='fChat'){
+    const r=parseChat(d.msg,todayStr());
+    ui.chat=(r.items.length||r.errors.length)?r:{err:'Wala akong nakitang halaga. Hal: <b>gas 500</b> o <b>stock 12000</b>.'};
+    render();return;
+  }else if(f.id==='fLog'){
     if(+d.cashout&&d.feemode!=='extra'){const h=(+d.cashout)-(+d.cofee||0);if(h<0){toast('⚠️ Mas malaki ang fee kesa sa cash-out','err');return;}d.cashout=String(Math.round(h*100)/100);}
     if(await run({action:'addLog',date:d.date,sales:d.sales,stock:d.stock,opex:d.opex,cashin:d.cashin,cashout:d.cashout,fee:d.fee,cofee:d.cofee,gsales:d.gsales,loadsale:d.loadsale,loadcost:d.loadcost,gstock:d.gstock,gopex:d.gopex,notes:d.notes},'Na-save ✓'))render();
   }else if(f.id==='fEditLog'){
