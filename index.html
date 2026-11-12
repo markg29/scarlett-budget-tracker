@@ -79,7 +79,7 @@ nav button.on{background:var(--pri);color:#fff}
 .bubble .nm{font:600 14px var(--disp);color:var(--pri);margin-bottom:2px}
 .mascot.warn .bubble .nm{color:var(--warn)}.mascot.bad .bubble .nm{color:var(--bad)}
 .bubble .n{font-size:12.5px;color:var(--mute);margin-top:5px}
-.supr2{border-top:1px dashed var(--line)}.supr2 summary{list-style:none;cursor:pointer;display:flex;align-items:center;gap:8px;padding:11px 0}.supr2 summary::-webkit-details-marker{display:none}.supr2 .sn{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-weight:600}.supr2 .sa{font-weight:700}.supr2 .bd{padding:0 0 10px;display:grid;gap:3px}.chip{font-size:11px;font-weight:700;padding:2px 7px;border-radius:99px;white-space:nowrap}.chip.ok{color:var(--pri-d);background:#e3f1e8}.chip.am{color:#a8741a;background:#fdf0d5}.chip.bad{color:var(--bad);background:var(--badbg)}
+.supr2{border-top:1px dashed var(--line)}.supr2 summary{list-style:none;cursor:pointer;display:flex;align-items:center;gap:8px;padding:11px 0}.supr2 summary::-webkit-details-marker{display:none}.supr2 .sn{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-weight:600}.supr2 .sa{font-weight:700}.supr2 summary{flex-wrap:wrap;row-gap:6px}.pb{flex-basis:100%;height:7px;background:var(--soft,#f3ecdc);border-radius:99px;overflow:hidden}.pb i{display:block;height:100%;border-radius:99px}.supr2 .bd{padding:0 0 10px;display:grid;gap:3px}.chip{font-size:11px;font-weight:700;padding:2px 7px;border-radius:99px;white-space:nowrap}.chip.ok{color:var(--pri-d);background:#e3f1e8}.chip.am{color:#a8741a;background:#fdf0d5}.chip.bad{color:var(--bad);background:var(--badbg)}
 .hid{display:none!important}label.chk{display:flex;gap:8px;align-items:center;font-weight:500}label.chk input{width:auto;margin:0}
 .tile{background:var(--soft);border-radius:16px;padding:11px 12px}
 .tile .sm{font-weight:700}.tile b{font:600 18px var(--disp)}
@@ -118,7 +118,7 @@ main,.card,.bubble{overflow-wrap:anywhere;word-break:break-word}.item>div,.ent>d
 // ====== ISANG BESES LANG: i-paste dito ang Apps Script URL (nagtatapos sa /exec) ======
 const API_URL='https://script.google.com/macros/s/AKfycbyqsMv_r7FbAmSJWvGhMFmHh177hiO2KS6onWPpFovH_HbmoizYhLB2bfHjetTDthIJfA/exec';
 const API_PIN='';
-const NEED_VER=15;const BUILD='nov13-compact';   // pinakabagong bersyon ng Code.gs na kailangan ng app na ito
+const NEED_VER=15;const BUILD='nov13-bars';   // pinakabagong bersyon ng Code.gs na kailangan ng app na ito
 const USER_NAME='Mark';   // pangalan na babatiin ni Kapi   // kung may PIN sa Code.gs, ilagay din dito
 // =======================================================================================
 //#LOGIC-START
@@ -428,13 +428,14 @@ function mbRows(){
   const q=(ui.supQ||'').trim().toLowerCase(),all=!!ui.budAll;
   return P.rows.map((x,i)=>{
     const v=x.visit,vis=!q?(all||i<8):x.name.toLowerCase().includes(q);
+    const tot=x.spent+x.reserve,pc=tot>0?Math.min(100,Math.round(x.spent/tot*100)):0,col=x.short7>0?'#c0392b':x.short>0?'#d9a441':'var(--pri)';
     const chip=x.short7>0?'<span class="chip bad">⚠ kulang pera</span>':x.short>0?'<span class="chip am">⚠ kulang budget</span>':x.reserve>0?'<span class="chip ok">✓</span>':'';
     const body=(v?`<div class="sm mute">${visTxt(v)}</div>`:'<div class="sm mute">Kulang pa ang kasaysayan para tantyahin ang bisita.</div>')
       +(x.reserve>0?`<div class="sm">Reserba: ${v.left} pang bisita × ~${peso(v.avg)} = <b>${peso(x.reserve)}</b></div>`:'')
       +(x.due>0?`<div class="sm mute">May bayarin na ${peso(x.due)} (14 araw)</div>`:'')
       +(x.short7>0?`<div class="sm neg">Kulang ang pera para sa bisita niya sa susunod na 7 araw (${peso(x.short7)})</div>`:'')
       +(x.short>0?`<div class="sm" style="color:#a8741a">Kulang ng ${peso(x.short)} sa budget para sa reserba niya</div>`:'');
-    return `<details class="supr2${vis?'':' hid'}" data-n="${esc(x.name.toLowerCase())}" data-i="${i}"><summary><span class="sn">${esc(x.name)}</span>${chip}<span class="sa">${peso(x.spent)}</span></summary><div class="bd">${body}</div></details>`;
+    return `<details class="supr2${vis?'':' hid'}" data-n="${esc(x.name.toLowerCase())}" data-i="${i}"><summary><span class="sn">${esc(x.name)}</span>${chip}<span class="sa">${peso(x.spent)}</span><span class="pb"><i style="width:${pc}%;background:${col}"></i></span></summary><div class="bd">${body}</div></details>`;
   }).join('');
 }
 function mbCard(t){
@@ -447,6 +448,8 @@ function mbCard(t){
   const tiles=`<div class="grid2" style="margin:8px 0">
 <div class="tile"><div class="sm mute">Natirang budget</div><b class="${P.R<0?'neg':''}">${peso(P.R)}</b><div class="sm ${bShort?'neg':'pos'}">${bShort?'⚠ Kulang ng '+peso(-P.surplus)+' sa reserba':'✓ Kasya ang reserba'}</div></div>
 <div class="tile"><div class="sm mute">Pera vs 7 araw</div><b class="${cShort?'neg':'pos'}">${cShort?'−':''}${peso(Math.abs(P.cashSurplus))}</b><div class="sm ${cShort?'neg':'pos'}">${cShort?'⚠ Kulang ang pera':'✓ Sobra sa pera'}</div></div></div>`;
+  const used=P.spentM+P.dueSup,upc=P.budget>0?Math.min(100,Math.round(used/P.budget*100)):100,ucol=P.R<0?'#c0392b':bShort?'#d9a441':'var(--pri)';
+  const obar=`<div class="row" style="border:0;padding-bottom:0"><span>Nagamit na budget</span><b>${upc}%</b></div><div class="pb" style="margin:4px 0 2px"><i style="width:${upc}%;background:${ucol}"></i></div><div class="sm mute">${peso(used)} ng ${peso(P.budget)} · natira ${peso(P.R)}</div>`;
   const warn=cShort?`<div class="banner warn">⚠️ Kulang ang pera mo para sa mga bisita ngayong linggo. Unahin ang mga supplier na walang ⚠ sa listahan.</div>`:(bShort?`<div class="banner warn">⚠️ Hindi kasya ang budget ng buwan sa lahat ng inaasahang bili. Ang mabagal na supplier ang unang kulang.</div>`:'');
   const low=P.lowWeek?`<div class="banner warn">⚠️ Mababa ang benta nitong huling 7 araw (~${peso(P.lowWeek.act)}/araw, dapat ~${peso(P.lowWeek.exp)}). Maaaring mataas pa ang tantya ng budget.</div>`:'';
   const how=`<details class="grp"><summary>Paano nakuwenta</summary><div style="padding:0 14px 12px">
@@ -462,8 +465,8 @@ ${row('Reserba, susunod na 7 araw',peso(P.reserve7))}
 <div class="sm mute" style="margin-top:8px">Kasama ang stock na nilog at ang bayad sa supplier. Kapag nilog mo ang stock at binayaran din ang bill nito, madodoble. Ang "Hindi nakapangalan" ay stock na walang supplier.</div></div></details>`;
   const n=P.rows.length,more=n>8&&!ui.supQ?`<button class="ghost full" id="budMore" style="margin-top:8px" data-act="budall">${ui.budAll?'Ipakita ang top 8 lang':'Ipakita lahat ('+n+' supplier)'}</button>`:'';
   const un=P.unnamed>0?`<div class="row" style="border-top:1px dashed var(--line);border-bottom:0"><span class="mute">Hindi nakapangalan</span><span>${peso(P.unnamed)}</span></div>`:'';
-  return `<div class="card"><h3>Budget sa stock <span class="mute sm">(${mname})</span></h3>${tiles}${warn}${low}${how}
-<div class="sub" style="margin-top:12px">Mga supplier <span class="mute sm">(${n}) · nabili ngayong buwan</span></div>
+  return `<div class="card"><h3>Budget sa stock <span class="mute sm">(${mname})</span></h3>${obar}${tiles}${warn}${low}${how}
+<div class="sub" style="margin-top:12px">Mga supplier <span class="mute sm">(${n}) · bar: nabili na ÷ inaasahang bili ngayong buwan</span></div>
 <input type="search" id="supQ" placeholder="Hanapin ang supplier..." autocomplete="off" value="${esc(ui.supQ||'')}" style="margin:6px 0">
 <div id="supList2">${mbRows()}</div><div id="supNone" class="mute sm hid" style="padding:8px 0">Walang nakitang supplier.</div>${un}${more}</div>`;
 }
