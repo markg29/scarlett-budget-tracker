@@ -117,7 +117,7 @@ main,.card,.bubble{overflow-wrap:anywhere;word-break:break-word}.item>div,.ent>d
 // ====== ISANG BESES LANG: i-paste dito ang Apps Script URL (nagtatapos sa /exec) ======
 const API_URL='https://script.google.com/macros/s/AKfycbyqsMv_r7FbAmSJWvGhMFmHh177hiO2KS6onWPpFovH_HbmoizYhLB2bfHjetTDthIJfA/exec';
 const API_PIN='';
-const NEED_VER=14;const BUILD='nov13-supplier-history';   // pinakabagong bersyon ng Code.gs na kailangan ng app na ito
+const NEED_VER=14;const BUILD='nov13-budget-all';   // pinakabagong bersyon ng Code.gs na kailangan ng app na ito
 const USER_NAME='Mark';   // pangalan na babatiin ni Kapi   // kung may PIN sa Code.gs, ilagay din dito
 // =======================================================================================
 //#LOGIC-START
@@ -507,8 +507,9 @@ function renderHome(){
   const sb=stockBudget(S.settings,S.log,S.pay,t,S.hist);
   const pct=sb.budget>0?Math.min(100,Math.round(sb.spent/sb.budget*100)):0,over=sb.budget>0&&sb.spent>sb.budget;
   const bar=(v,l)=>{const p=l>0?Math.min(100,Math.round(v/l*100)):(v>0?100:0),o=l>0?v>l:v>0;return `<div class="bar"><i style="width:${p}%" class="${o?'over':''}"></i></div>`;};
-  const sbRows=sb.list.slice(0,12).map(x=>`<div class="supr"><div class="row"><span>${x.key?esc(x.name):'Hindi nakapangalan'}</span><span>${peso(x.spent)}${x.key&&x.limit?` <span class="mute sm">/ ${peso(x.limit)}</span>`:''}</span></div>${x.key&&x.limit?bar(x.spent,x.limit):''}</div>`).join('');
-  const budgetCard=`<div class="card"><h3>Budget sa stock <span class="mute sm">(huling 30 araw)</span></h3>${sb.budget>0?`<div class="row"><span>Benta</span><b>${peso(sb.sales30)}</b></div><div class="row"><span>Limit sa pambili <span class="mute sm">(benta − ${+S.settings.margin_pct||0}% margin)</span></span><b>${peso(sb.budget)}</b></div><div class="row"><span>Nabili na</span><b class="${over?'neg':''}">${peso(sb.spent)}</b></div>${bar(sb.spent,sb.budget)}<div class="sm ${over?'neg':'mute'}" style="margin-top:6px">${over?'Lampas ng '+peso(sb.spent-sb.budget)+' sa limit.':'Natira: '+peso(sb.left)+' ('+(100-pct)+'%).'}</div>`:'<div class="mute">Kulang pa ang benta log para makuwenta ang limit.</div>'}${sbRows?`<div class="sub" style="margin-top:12px">Kada supplier <span class="mute sm">(nabili / limit batay sa dating bili mo, 90 araw)</span></div>${sbRows}`:''}<div class="sm mute" style="margin-top:8px">Kasama ang stock na nilog at ang bayad sa supplier. Kung nilog mo ang stock at binayaran din ang bill nito, dalawang beses ito mabibilang. Ang "Hindi nakapangalan" ay stock na walang supplier.</div></div>`;
+  const sbAll=!!ui.budAll,sbShow=sbAll?sb.list:sb.list.slice(0,10),sbMore=sb.list.length>10?`<button class="ghost full" style="margin-top:8px" data-act="budall">${sbAll?'Ipakita ang top 10 lang':'Ipakita lahat ('+sb.list.length+' supplier)'}</button>`:'';
+  const sbRows=sbShow.map(x=>`<div class="supr"><div class="row"><span>${x.key?esc(x.name):'Hindi nakapangalan'}</span><span>${peso(x.spent)}${x.key&&x.limit?` <span class="mute sm">/ ${peso(x.limit)}</span>`:''}</span></div>${x.key&&x.limit?bar(x.spent,x.limit):''}</div>`).join('');
+  const budgetCard=`<div class="card"><h3>Budget sa stock <span class="mute sm">(huling 30 araw)</span></h3>${sb.budget>0?`<div class="row"><span>Benta</span><b>${peso(sb.sales30)}</b></div><div class="row"><span>Limit sa pambili <span class="mute sm">(benta − ${+S.settings.margin_pct||0}% margin)</span></span><b>${peso(sb.budget)}</b></div><div class="row"><span>Nabili na</span><b class="${over?'neg':''}">${peso(sb.spent)}</b></div>${bar(sb.spent,sb.budget)}<div class="sm ${over?'neg':'mute'}" style="margin-top:6px">${over?'Lampas ng '+peso(sb.spent-sb.budget)+' sa limit.':'Natira: '+peso(sb.left)+' ('+(100-pct)+'%).'}</div>`:'<div class="mute">Kulang pa ang benta log para makuwenta ang limit.</div>'}${sbRows?`<div class="sub" style="margin-top:12px">Kada supplier <span class="mute sm">(nabili / limit batay sa dating bili mo, 90 araw)</span></div>${sbRows}${sbMore}`:''}<div class="sm mute" style="margin-top:8px">Kasama ang stock na nilog at ang bayad sa supplier. Kung nilog mo ang stock at binayaran din ang bill nito, dalawang beses ito mabibilang. Ang "Hindi nakapangalan" ay stock na walang supplier.</div></div>`;
   let verdict='';const isCur=ym===cur;
   if(m.sales>0){
     if(!isCur){}else if(m.storeNet<0)verdict='Mas malaki ang labas kesa pasok sa mismong store ngayong buwan.';
@@ -738,6 +739,7 @@ document.addEventListener('click',async ev=>{
   if(a==='chatok'&&ui.chat&&ui.chat.entries&&!ui.chat.errors.length){const c=ui.chat;let n=0;while(c.entries.length){const e=c.entries[0],F=e.fields;const ok=await run({action:'addLog',date:e.date,sales:F.sales,stock:F.stock,opex:F.opex,cashin:F.cashin,cashout:F.cashout,fee:F.fee,cofee:F.cofee,gsales:0,loadsale:F.loadsale,loadcost:F.loadcost,gstock:F.gstock,gopex:F.gopex,supplier:F.supplier,notes:e.notes},c.entries.length===1?(n+1)+' entry ang na-save ni Kapi ✓':undefined);if(!ok){c.items=c.entries.map(x=>Object.assign({date:x.date},x.item));render();return;}c.entries.shift();n++;}ui.chat=null;render();return;}
   if(a==='resetcache'){try{localStorage.removeItem('pk_cache');}catch(_){}location.reload();return;}
   if(a==='logtype'){ui.logType=el.dataset.v;ui.entN=3;return render();}
+  if(a==='budall'){ui.budAll=!ui.budAll;return render();}
   if(a==='moreent'){ui.entN=(ui.entN||3)+5;return render();}
   if(a==='lessent'){ui.entN=3;return render();}
   if(a==='filter'){ui.filter=el.dataset.v;return render();}
