@@ -117,7 +117,7 @@ main,.card,.bubble{overflow-wrap:anywhere;word-break:break-word}.item>div,.ent>d
 // ====== ISANG BESES LANG: i-paste dito ang Apps Script URL (nagtatapos sa /exec) ======
 const API_URL='https://script.google.com/macros/s/AKfycbyqsMv_r7FbAmSJWvGhMFmHh177hiO2KS6onWPpFovH_HbmoizYhLB2bfHjetTDthIJfA/exec';
 const API_PIN='';
-const NEED_VER=14;const BUILD='nov13-budget-visit';   // pinakabagong bersyon ng Code.gs na kailangan ng app na ito
+const NEED_VER=15;const BUILD='nov13-cash7';   // pinakabagong bersyon ng Code.gs na kailangan ng app na ito
 const USER_NAME='Mark';   // pangalan na babatiin ni Kapi   // kung may PIN sa Code.gs, ilagay din dito
 // =======================================================================================
 //#LOGIC-START
@@ -255,10 +255,10 @@ function supCheck(name,known){const k=supKey(name);if(!k)return{name:'',near:nul
 function supVisits(log,pay,hist,today){
   hist=Array.isArray(hist)?hist:[];
   const hMax=hist.reduce((m,x)=>String(x.date)>m?String(x.date):m,''),logCut=log.filter(l=>(+l.stock||0)>0&&l.supplier).reduce((m,l)=>l.date<m?l.date:m,'9999-12-31'),from=addDays(today,-150);
-  const D={};const add=(n,d)=>{const k=supKey(n);d=String(d);if(!k||d<from||d>today)return;(D[k]=D[k]||{});D[k][d]=1;};
-  hist.filter(x=>String(x.date)<logCut).forEach(x=>add(x.supplier,x.date));
-  log.filter(l=>(+l.stock||0)>0&&l.supplier).forEach(l=>add(l.supplier,l.date));
-  pay.filter(p=>p.status==='Paid'&&p.type==='Supplier'&&(!hMax||String(p.paidDate)>hMax)).forEach(p=>add(p.name,p.paidDate));
+  const D={};const add=(n,d,a)=>{const k=supKey(n);d=String(d);if(!k||d<from||d>today)return;(D[k]=D[k]||{});D[k][d]=(D[k][d]||0)+(+a||0);};
+  hist.filter(x=>String(x.date)<logCut).forEach(x=>add(x.supplier,x.date,x.amount));
+  log.filter(l=>(+l.stock||0)>0&&l.supplier).forEach(l=>add(l.supplier,l.date,l.stock));
+  pay.filter(p=>p.status==='Paid'&&p.type==='Supplier'&&(!hMax||String(p.paidDate)>hMax)).forEach(p=>add(p.name,p.paidDate,p.amount));
   const y=+today.slice(0,4),m=+today.slice(5,7),mEnd=today.slice(0,8)+String(new Date(Date.UTC(y,m,0)).getUTCDate()).padStart(2,'0');
   const out={};
   Object.keys(D).forEach(k=>{
@@ -267,9 +267,51 @@ function supVisits(log,pay,hist,today){
     const every=Math.max(1,Math.round(iv[Math.floor((iv.length-1)/2)]));
     const last=ds[ds.length-1],next=addDays(last,every),late=next<today?diffDays(next,today):0,eff=late?today:next;
     let left=0,d=eff;while(d<=mEnd&&left<40){left++;d=addDays(d,every);}
-    out[k]={every,last,next:eff,late,left,n:ds.length};
+    let left7=0;d=eff;const e7=addDays(today,7);while(d<=e7&&left7<40){left7++;d=addDays(d,every);}
+    out[k]={every,last,next:eff,late,left,left7,n:ds.length,avg:Math.round(ds.reduce((t,d)=>t+D[k][d],0)/ds.length)};
   });
   return out;
+}
+function supSpend(log,pay,hist,today,from){
+  hist=Array.isArray(hist)?hist:[];
+  const hMax=hist.reduce((m,x)=>String(x.date)>m?String(x.date):m,''),logCut=log.filter(l=>(+l.stock||0)>0&&l.supplier).reduce((m,l)=>l.date<m?l.date:m,'9999-12-31');
+  const by={};const add=(name,amt)=>{const k=supKey(name);const e=by[k]||(by[k]={name:'',amt:0});if(name&&!e.name)e.name=String(name).trim();e.amt+=amt;};
+  hist.filter(x=>String(x.date)<logCut&&String(x.date)>=from&&String(x.date)<=today).forEach(x=>add(x.supplier,+x.amount||0));
+  log.filter(l=>l.date>=from&&l.date<=today&&(+l.stock||0)>0&&(!hMax||l.date>hMax||l.supplier)).forEach(l=>add(l.supplier||'',+l.stock||0));
+  pay.filter(p=>p.status==='Paid'&&p.type==='Supplier'&&String(p.paidDate)>=from&&String(p.paidDate)<=today&&(!hMax||String(p.paidDate)>hMax)).forEach(p=>add(p.name,+p.amount||0));
+  return by;
+}
+function dailySales(log,shist){
+  const m={};(Array.isArray(shist)?shist:[]).forEach(x=>{if((+x.amount||0)>0)m[String(x.date)]=+x.amount;});
+  const k={};log.forEach(l=>{if((+l.sales||0)>0)k[l.date]=(k[l.date]||0)+(+l.sales||0);});
+  Object.keys(k).forEach(d=>{m[d]=k[d];});
+  return m;
+}
+function monthPlan(st,log,pay,hist,today,cash,shist){
+  hist=Array.isArray(hist)?hist:[];
+  const ms=today.slice(0,8)+'01',y=+today.slice(0,4),mo=+today.slice(5,7),dim=new Date(Date.UTC(y,mo,0)).getUTCDate(),dayNo=+today.slice(8,10);
+  const mrg=(+st.margin_pct||0)/100,buf=+st.buffer||0;
+  const daily=dailySales(log,shist),w28=addDays(today,-27),sd={};Object.keys(daily).filter(d=>d>=w28&&d<=today).forEach(d=>{sd[d]=daily[d];});
+  const nd=Object.keys(sd).length;if(nd<3)return{ok:false};
+  const avgDaily=Object.keys(sd).reduce((t,k)=>t+sd[k],0)/nd;
+  const soFar=Object.keys(daily).filter(d=>d>=ms&&d<=today).reduce((t,d)=>t+daily[d],0),todayHas=!!sd[today];
+  const daysLeft=dim-dayNo+(todayHas?0:1),remDays=[];for(let i=0;i<daysLeft;i++)remDays.push(addDays(today,todayHas?i+1:i));
+  const SAFE=0.95;let futureSales=avgDaily*daysLeft*SAFE,lowWeek=null,rhythm=false;
+  {const w7=Object.keys(sd).filter(d=>d>addDays(today,-7));if(w7.length>=4){const a7=w7.reduce((t,d)=>t+sd[d],0)/w7.length;if(a7<0.85*avgDaily)lowWeek={act:Math.round(a7),exp:Math.round(avgDaily)};}}
+  const proj=Math.round(soFar+futureSales),budget=Math.round(proj*(1-mrg));
+  const sp=supSpend(log,pay,hist,today,ms),vis=supVisits(log,pay,hist,today),end14=addDays(today,14),dueBy={};
+  const un=pay.filter(p=>p.status!=='Paid'&&String(p.due)<=end14);
+  un.filter(p=>p.type==='Supplier').forEach(p=>{const k=supKey(p.name);dueBy[k]=(dueBy[k]||0)+(+p.amount||0);});
+  const dueSup=r2(sum(un.filter(p=>p.type==='Supplier'),p=>+p.amount||0)),dueAll=r2(sum(un,p=>+p.amount||0));
+  const spentM=r2(Object.keys(sp).reduce((t,k)=>t+sp[k].amt,0)),R=r2(budget-spentM-dueSup),cashPool=Math.max(0,r2(cash-dueAll-buf));
+  const pool=Math.min(Math.max(0,R),cashPool);
+  const keys={};Object.keys(sp).concat(Object.keys(vis),Object.keys(dueBy)).forEach(k=>{keys[k]=1;});
+  const names={},nm=(n)=>{const k=supKey(n);if(k&&!names[k])names[k]=String(n).trim();};hist.forEach(x=>nm(x.supplier));log.forEach(l=>{if(l.supplier)nm(l.supplier);});pay.forEach(p=>{if(p.type==='Supplier')nm(p.name);});
+  const rows=Object.keys(keys).filter(k=>k).map(k=>{const v=vis[k]||null,reserve=v?Math.round(v.left*v.avg):0,reserve7=v?Math.round(Math.min(v.left,v.left7)*v.avg):0;return{key:k,name:(sp[k]&&sp[k].name)||names[k]||k,spent:r2(sp[k]?sp[k].amt:0),due:r2(dueBy[k]||0),visit:v,reserve,reserve7};})
+    .sort((a,b)=>(a.visit?a.visit.every:999)-(b.visit?b.visit.every:999)||b.spent-a.spent);
+  let rem=Math.max(0,R),remC=cashPool;rows.forEach(x=>{x.fund=Math.min(x.reserve,rem);rem-=x.fund;x.short=x.reserve-x.fund;x.fund7=Math.min(x.reserve7,remC);remC-=x.fund7;x.short7=x.reserve7-x.fund7;});
+  const unnamed=sp['']?r2(sp[''].amt):0,totalReserve=r2(sum(rows,x=>x.reserve)),reserve7=r2(sum(rows,x=>x.reserve7));
+  return{ok:true,proj,soFar,avgDaily:Math.round(avgDaily),daysLeft,rhythm,lowWeek,future:Math.round(futureSales),budget,spentM,unnamed,dueSup,dueAll,R,cashPool,totalReserve,surplus:r2(R-totalReserve),reserve7,cashSurplus:r2(cashPool-reserve7),rows};
 }
 function stockBudget(st,log,pay,today,hist){
   hist=Array.isArray(hist)?hist:[];
@@ -380,12 +422,45 @@ function walletMgr(){
     form=`<form id="fWal"><input type="hidden" name="wid" value="${w?esc(w.id):''}"><label>Pangalan ng wallet</label><input name="name" required maxlength="40" value="${w?esc(w.name):''}" placeholder="hal. Maya, Bangko">${core?'<div class="sm mute">Ang panimulang halaga ng wallet na ito ay nasa itaas (✏️ Baguhin).</div>':`<label>Panimulang halaga</label><input type="number" name="opening" inputmode="decimal" step="any" min="0" value="${w?esc(w.opening):0}"><label class="chk"><input type="checkbox" name="intotal" ${!w||w.inTotal?'checked':''}> Kasama sa Kabuuang pera</label>`}<div class="grid2"><button class="full">Save</button><button type="button" class="ghost full" data-act="walcancel">Kansel</button></div></form>`;}
   return `<div class="card"><h3>Mga wallet</h3>${rows}${form||'<button class="full" data-act="waledit" data-id="new">+ Dagdag na wallet</button>'}<div class="sm mute" style="margin-top:8px">Pwedeng itago ang wallet kapag zero na ang laman. Ang wallet na may lipat o bayad na ay itatago na lang, hindi mabubura.</div></div>`;
 }
+function mbCard(t){
+  const cash=calcWallets(S.settings,S.log,S.pay,S.transfers).total,P=monthPlan(S.settings,S.log,S.pay,S.hist,t,cash,S.shist);
+  const foot='<div class="sm mute" style="margin-top:10px">Kasama ang stock na nilog at ang bayad sa supplier. Kung nilog mo ang stock at binayaran din ang bill nito, dalawang beses ito mabibilang. Ang "Hindi nakapangalan" ay stock na walang supplier.</div>';
+  const mname=new Date(utc(t)).toLocaleDateString('en-PH',{month:'long',timeZone:'UTC'});
+  if(!P.ok)return `<div class="card"><h3>Budget sa stock <span class="mute sm">(${mname})</span></h3><div class="mute">Kulang pa ang benta log (kailangan ng 3+ araw na may benta sa huling 28 araw) para makuwenta ang budget.</div></div>`;
+  const row=(l,v,c)=>`<div class="row"><span>${l}</span><b${c?` class="${c}"`:''}>${v}</b></div>`;
+  const all=!!ui.budAll,show=all?P.rows:P.rows.slice(0,10);
+  const more=P.rows.length>10?`<button class="ghost full" style="margin-top:8px" data-act="budall">${all?'Ipakita ang top 10 lang':'Ipakita lahat ('+P.rows.length+' supplier)'}</button>`:'';
+  const rr=show.map(x=>{const v=x.visit,st=(x.short7>0?`<div class="sm neg">Kulang ang pera mo ngayon para sa bisita niya sa susunod na 7 araw (${peso(x.short7)})</div>`:'')+(x.reserve>0?(x.short>0?`<div class="sm" style="color:#a8741a">Kulang ng ${peso(x.short)} sa budget para sa reserba niya ngayong buwan</div>`:(x.short7>0?'':'<div class="sm pos">May pondo para sa susunod na bisita</div>')):'');
+    return `<div class="supr"><div class="row"><span>${esc(x.name)}</span><span>${peso(x.spent)}</span></div>${v?`<div class="sm mute">${visTxt(v)}</div>`:'<div class="sm mute">Kulang pa ang kasaysayan para tantyahin ang bisita.</div>'}${x.reserve>0?`<div class="sm">Reserba: ${v.left} pang bisita × ~${peso(v.avg)} = <b>${peso(x.reserve)}</b></div>`:''}${x.due>0?`<div class="sm mute">May bayarin na ${peso(x.due)} (14 araw)</div>`:''}${st}</div>`;}).join('');
+  const un=P.unnamed>0?`<div class="supr"><div class="row"><span>Hindi nakapangalan</span><span>${peso(P.unnamed)}</span></div></div>`:'';
+  const short=P.surplus<0;
+  return `<div class="card"><h3>Budget sa stock <span class="mute sm">(${mname})</span></h3>
+${row('Tantyang benta ng buwan',peso(P.proj))}<div class="sm mute" style="margin:-2px 0 6px">Benta na ${peso(P.soFar)} + tantya sa natitirang ${P.daysLeft} araw: ${peso(P.future)} (~${peso(P.avgDaily)}/araw × 95% pangkaligtasan)</div>${P.lowWeek?`<div class="banner warn" style="margin:0 0 8px">⚠️ Mababa ang benta nitong huling 7 araw (~${peso(P.lowWeek.act)}/araw, dapat ~${peso(P.lowWeek.exp)}). Maaaring mataas pa ang tantya sa itaas, kaya mag-ingat sa pagbili.</div>`:''}
+${row('Budget sa pambili <span class="mute sm">(benta − '+(+S.settings.margin_pct||0)+'% margin)</span>',peso(P.budget))}
+${row('Nabili na ngayong buwan',peso(P.spentM))}
+${P.dueSup>0?row('Bayarin sa supplier <span class="mute sm">(due sa 14 araw)</span>',peso(P.dueSup)):''}
+${row('Natirang budget',peso(P.R),P.R<0?'neg':'')}
+${P.dueAll>P.dueSup?row('Ibang bayarin <span class="mute sm">(sweldo, store, personal; 14 araw)</span>',peso(P.dueAll-P.dueSup)):''}
+${row('Pera na pwedeng gamitin sa stock <span class="mute sm">(pera − bayarin'+(+S.settings.buffer?' − buffer':'')+')</span>',peso(P.cashPool))}
+${row('Reserba sa mga susunod na bisita',peso(P.totalReserve))}
+${row(short?'Kulang sa budget':'Sobra sa budget pagkatapos ng reserba',peso(Math.abs(P.surplus)),short?'neg':'pos')}
+${short?`<div class="banner warn" style="margin-top:8px">⚠️ Hindi kasya ang budget ng buwan para sa lahat ng inaasahang bili (kulang ${peso(-P.surplus)}). Nakaayos ang listahan ayon sa dalas ng bisita: ang una ang may pondo, at ang mabagal na supplier ang unang kulang.</div>`:`<div class="sm mute" style="margin-top:6px">Kasya sa budget ng buwan ang lahat ng inaasahang bili. Ang sobra ay pwedeng gamitin ng kahit anong supplier.</div>`}
+<div class="sub" style="margin-top:10px">Pera ngayon vs bisita sa susunod na 7 araw</div>
+${row('Reserba sa susunod na 7 araw',peso(P.reserve7))}
+${row(P.cashSurplus<0?'Kulang ang pera':'Sobra sa pera',peso(Math.abs(P.cashSurplus)),P.cashSurplus<0?'neg':'pos')}
+${P.cashSurplus<0?`<div class="banner warn" style="margin-top:8px">⚠️ Kulang ang pera mo ngayon (${peso(P.cashPool)} na pwedeng gamitin) para sa mga bisita sa susunod na 7 araw (${peso(P.reserve7)}). Hintayin ang benta, o unahin ang mga supplier na may pondo sa listahan.</div>`:''}
+<div class="sub" style="margin-top:12px">Kada supplier <span class="mute sm">(nabili ngayong buwan · reserba para sa natitirang bisita)</span></div>${rr}${un}${more}${foot}</div>`;
+}
 function visTxt(v){
   const dl=s=>dlabel(s);
   if(v.every<=2)return 'Halos araw-araw bumibisita · huli: '+dl(v.last);
   if(v.late>Math.max(14,v.every*2))return 'Dati kada ~'+v.every+' araw · huli: '+dl(v.last)+' · matagal nang walang bili ('+(v.late+v.every)+' araw na)';
   const nx=v.late?'dapat na (lampas '+v.late+' araw)':'~'+dl(v.next);
   return 'Bumibisita kada ~'+v.every+' araw · huli: '+dl(v.last)+' · susunod: '+nx+' · '+v.left+' pa ngayong buwan';
+}
+function salesMgr(){
+  const H=S.shist||[],dates=H.map(x=>String(x.date)).sort(),n=H.length;
+  return `<div class="card"><h3>Kasaysayan ng benta</h3><div class="sm mute">Pandagdag na datos para sa tantya ng benta ng buwan. Pang-tantya lang ito at hindi nito ginagalaw ang Cash at wallets. Ang mga araw na may benta sa Kapi ang masusunod.</div>${n?`<div class="row" style="margin-top:8px"><span>Laman ngayon</span><b>${n} na araw</b></div><div class="sm mute">${dlabel(dates[0])} hanggang ${dlabel(dates[n-1])}</div>`:'<div class="mute" style="margin-top:8px">Wala pa.</div>'}<label>I-import ang sales_history.json</label><input type="file" accept=".json,application/json" data-sales>${n?'<button class="ghost full" data-act="salesclear" style="margin-top:8px">Burahin ang kasaysayan ng benta</button>':''}</div>`;
 }
 function histMgr(){
   const H=S.hist||[],dates=H.map(x=>String(x.date)).sort(),n=H.length;
@@ -406,7 +481,7 @@ function dlabel(s){return new Date(utc(s)).toLocaleDateString('en-PH',{month:'sh
 function ld(k,d){try{return JSON.parse(localStorage.getItem(k))||d;}catch(e){return d;}}
 
 let cfg=API_URL?{url:API_URL,pin:API_PIN}:ld('pk_cfg',{url:'',pin:''});
-function normS(x){x=x&&typeof x==='object'?x:{};const A=v=>Array.isArray(v)?v.filter(r=>r&&typeof r==='object'):[];return{settings:x.settings&&typeof x.settings==='object'?x.settings:{},log:A(x.log),pay:A(x.pay),transfers:A(x.transfers),wallets:A(x.wallets),suppliers:A(x.suppliers),hist:A(x.hist)};}
+function normS(x){x=x&&typeof x==='object'?x:{};const A=v=>Array.isArray(v)?v.filter(r=>r&&typeof r==='object'):[];return{settings:x.settings&&typeof x.settings==='object'?x.settings:{},log:A(x.log),pay:A(x.pay),transfers:A(x.transfers),wallets:A(x.wallets),suppliers:A(x.suppliers),hist:A(x.hist),shist:A(x.shist)};}
 let S=normS(ld('pk_cache',null));
 S.transfers=S.transfers||[];setCW(S.wallets);
 let ui={editLog:null,bd:null,pay:null,more:null,setEdit:false,tab:'home',filter:'all',form:false,edit:null,busy:false,logType:'benta',entN:3,emptyWarn:false,chat:null,paidN:10,paidMore:null,paidEdit:null,month:null};
@@ -537,13 +612,7 @@ function renderHome(){
   const mascot=`<div class="mascot ${b}">${mascotSVG(b)}<div class="bubble"><div class="nm">Kapi</div>${msg}${notes.map(n=>`<div class="n">${n}</div>`).join('')}</div></div>`;
   const up=f.events.slice(0,6).map(e=>`<div class="item"><div>${esc(e.name)}<span class="tag ${e.overdue?'od':''}">${e.overdue?'LAMPAS':esc(e.type)}</span><div class="sm mute">${dlabel(e.due)}${e.day>0?' · '+e.day+' araw':''}</div></div><b>${peso(e.amount)}</b></div>`).join('')||'<div class="mute">Walang nakabinbing bayarin.</div>';
 
-  const sb=stockBudget(S.settings,S.log,S.pay,t,S.hist),sbCash=calcWallets(S.settings,S.log,S.pay,S.transfers).total,sbBuf=+S.settings.buffer||0;
-  const pct=sb.budget>0?Math.min(100,Math.round(sb.spent/sb.budget*100)):0,over=sb.budget>0&&sb.spent>sb.budget;
-  const totOK=sb.avail>=0&&sbCash>=sb.dueAll+sbBuf,poolCash=Math.max(0,sbCash-sb.dueAll-sbBuf),poolBud=Math.max(0,sb.avail),bind=poolCash<poolBud,pool=Math.min(poolCash,poolBud);
-  const bar=(v,l,soft)=>{const p=l>0?Math.min(100,Math.round(v/l*100)):(v>0?100:0),o=l>0?v>l:v>0,sf=o&&soft;return `<div class="bar"><i style="width:${p}%${sf?';background:#d9a441':''}" class="${o&&!sf?'over':''}"></i></div>`;};
-  const sbAll=!!ui.budAll,sbShow=sbAll?sb.list:sb.list.slice(0,10),sbMore=sb.list.length>10?`<button class="ghost full" style="margin-top:8px" data-act="budall">${sbAll?'Ipakita ang top 10 lang':'Ipakita lahat ('+sb.list.length+' supplier)'}</button>`:'';
-  const sbRows=sbShow.map(x=>`<div class="supr"><div class="row"><span>${x.key?esc(x.name):'Hindi nakapangalan'}</span><span>${peso(x.spent)}${x.key&&x.limit?` <span class="mute sm">/ ${peso(x.limit)}</span>`:''}</span></div>${x.key&&x.limit?bar(x.spent+x.due,x.limit,totOK):''}${x.due>0?`<div class="sm ${x.avail<0&&!totOK?'neg':'mute'}">May bayarin na ${peso(x.due)} (14 araw) → ${x.avail<0?'lampas ng '+peso(-x.avail)+' sa hati niya'+(totOK?', okay pa dahil may natira sa kabuuan':''):'pwede pang bilhin '+peso(x.avail)}</div>`:(x.limit&&x.spent>x.limit&&totOK?`<div class="sm mute">Lampas ng ${peso(x.spent-x.limit)} sa hati niya, okay pa dahil may natira sa kabuuan.</div>`:'')}${x.visit?`<div class="sm mute">${visTxt(x.visit)}</div>`:''}${bind&&x.share>0?`<div class="sm">Hati sa pera mo ngayon: <b>${peso(Math.round(pool*x.share))}</b></div>`:''}</div>`).join('');
-  const budgetCard=`<div class="card"><h3>Budget sa stock <span class="mute sm">(huling 30 araw)</span></h3>${sb.budget>0?`<div class="row"><span>Benta</span><b>${peso(sb.sales30)}</b></div><div class="row"><span>Limit sa pambili <span class="mute sm">(benta − ${+S.settings.margin_pct||0}% margin)</span></span><b>${peso(sb.budget)}</b></div><div class="row"><span>Nabili na</span><b class="${over?'neg':''}">${peso(sb.spent)}</b></div>${bar(sb.spent,sb.budget)}<div class="sm ${over?'neg':'mute'}" style="margin-top:6px">${over?'Lampas ng '+peso(sb.spent-sb.budget)+' sa limit.':'Natira: '+peso(sb.left)+' ('+(100-pct)+'%).'}</div>${sb.dueAll>0?`<div class="sub" style="margin-top:10px">Mga bayarin na due sa 14 araw</div>${sb.due>0?`<div class="row"><span>Supplier</span><b>${peso(sb.due)}</b></div>`:''}${Object.keys(sb.otherBy).map(k=>`<div class="row"><span>${esc({Staff:'Sweldo ng tauhan',Store:'Gastos ng store',Personal:'Personal'}[k]||k)}</span><b>${peso(sb.otherBy[k])}</b></div>`).join('')}<div class="row"><b>Kabuuan</b><b>${peso(sb.dueAll)}</b></div><div class="row"><span>Pwede pang bilhin <span class="mute sm">(batay sa budget)</span></span><b class="${sb.avail<0?'neg':'pos'}">${peso(sb.avail)}</b></div>${sbCash<sb.dueAll+sbBuf?`<div class="banner warn" style="margin-top:8px">⚠️ Kulang ang pera mo (${peso(sbCash)}) para sa bayarin na ${peso(sb.dueAll)}${sbBuf?' at buffer na '+peso(sbBuf):''}. Huwag munang bumili ng dagdag.</div>`:`<div class="row"><span>Pera na pwedeng gamitin sa stock <span class="mute sm">(pera − bayarin${sbBuf?' − buffer':''})</span></span><b>${peso(sbCash-sb.dueAll-sbBuf)}</b></div>${sbCash-sb.dueAll-sbBuf<Math.max(0,sb.avail)?'<div class="sm neg" style="margin-top:4px">Mas maliit ang pera mo kesa sa budget na natira. Ito ang sundin.</div>':''}`}${sb.dueAll30>sb.dueAll?`<div class="sm mute" style="margin-top:6px">Sa 30 araw, ${peso(sb.dueAll30)} ang kabuuang bayarin. Bantayan ang forecast sa itaas.</div>`:''}`:''}`:'<div class="mute">Kulang pa ang benta log para makuwenta ang limit.</div>'}${sbRows?`<div class="sub" style="margin-top:12px">Kada supplier <span class="mute sm">(nabili / limit batay sa dating bili mo, 90 araw; kasama ang bayarin na due sa 14 araw)</span></div>${sbRows}${sbMore}`:''}<div class="sm mute" style="margin-top:8px">Kasama ang stock na nilog at ang bayad sa supplier. Kung nilog mo ang stock at binayaran din ang bill nito, dalawang beses ito mabibilang. Ang "Hindi nakapangalan" ay stock na walang supplier.</div></div>`;
+  const budgetCard=mbCard(t);
   let verdict='';const isCur=ym===cur;
   if(m.sales>0){
     if(!isCur){}else if(m.storeNet<0)verdict='Mas malaki ang labas kesa pasok sa mismong store ngayong buwan.';
@@ -719,7 +788,7 @@ function renderSet(){
 <button class="full">I-save at i-test</button></form></div>`;
   const F=[['opening_cash','Panimulang Cash','Cash na hawak mo nung nagsimula ka mag-log'],['opening_gcash','Panimulang GCash','Balance ng GCash wallet nung nagsimula ka'],['opening_drawer','Panimulang Pera ng GCash','Cash sa drawer ng cash-in at load'],['opening_huling','Panimulang Huling Benta','Perang iniwan mo sa store bilang huling benta'],['opening_utang','Panimulang Utang ng iba','Total na utang sa iyo nung nagsimula ka (hindi kasama sa Kabuuang pera)'],['opening_personal','Panimulang Personal','Pera na pang-sarili mo'],['opening_barya','Panimulang Barya','Coins ng store, hiwalay sa Pondo'],['margin_pct','Margin ng tubo (%)','Tantya ng tubo sa benta'],['buffer','Buffer','Pinakamababang pera na gusto mong laging may natitira']];
   if(!ui.setEdit)return conn+`<div class="card"><h3>Pera</h3>${F.map(f=>`<div class="row"><span>${f[1]}<div class="sm mute">${f[2]}</div></span><b>${f[0]==='margin_pct'?(+s[f[0]]||0)+'%':peso(+s[f[0]]||0)}</b></div>`).join('')}
-<button class="ghost full" data-act="setedit">✏️ Baguhin</button></div>${walletMgr()}${supMgr()}${histMgr()}`;
+<button class="ghost full" data-act="setedit">✏️ Baguhin</button></div>${walletMgr()}${supMgr()}${histMgr()}${salesMgr()}`;
   return conn+`<div class="sm mute" style="margin:0 4px 10px">Bersyon ng app: ${BUILD}</div><div class="card"><h3>Baguhin ang Settings</h3><div class="banner warn">Baguhin lang ito kung sigurado ka. Apektado ang lahat ng balance at forecast.</div><form id="fSet">
 ${F.map(f=>`<label>${f[1]} <span class="mute sm">· ${f[2]}</span></label><input type="number" name="${f[0]}" inputmode="decimal" step="any" value="${+s[f[0]]||0}">`).join('')}
 <div class="grid2"><button class="full">I-save</button><button type="button" class="ghost full" data-act="setcancel">Kansel</button></div></form></div>`;
@@ -768,6 +837,7 @@ document.addEventListener('click',async ev=>{
   if(a==='suphide'){await run({action:'setSupplierActive',id,active:false},'Naitago');return;}
   if(a==='supshow'){await run({action:'setSupplierActive',id,active:true},'Naibalik ✓');return;}
   if(a==='supdel'){const s=(S.suppliers||[]).find(x=>x.id===id);if(s&&confirm('Burahin si "'+s.name+'" sa listahan?'))await run({action:'delSupplier',id},'Binura');return;}
+  if(a==='salesclear'){if(confirm('Burahin ang kasaysayan ng benta? Hindi apektado ang Cash at wallets.'))await run({action:'clearSales'},'Binura');return;}
   if(a==='histclear'){if(confirm('Burahin ang kasaysayan ng bili sa supplier? Hindi apektado ang Cash at wallets.'))await run({action:'clearHistory'},'Binura');return;}
   if(a==='supimport'){await run({action:'importSuppliers'},'Naidagdag ✓');return;}
   if(a==='chatok'&&ui.chat&&ui.chat.entries&&!ui.chat.errors.length){const c=ui.chat;let n=0;while(c.entries.length){const e=c.entries[0],F=e.fields;const ok=await run({action:'addLog',date:e.date,sales:F.sales,stock:F.stock,opex:F.opex,cashin:F.cashin,cashout:F.cashout,fee:F.fee,cofee:F.cofee,gsales:0,loadsale:F.loadsale,loadcost:F.loadcost,gstock:F.gstock,gopex:F.gopex,supplier:F.supplier,notes:e.notes},c.entries.length===1?(n+1)+' entry ang na-save ni Kapi ✓':undefined);if(!ok){c.items=c.entries.map(x=>Object.assign({date:x.date},x.item));render();return;}c.entries.shift();n++;}ui.chat=null;render();return;}
@@ -804,6 +874,15 @@ document.addEventListener('click',async ev=>{
 
 function billType(f){const sup=f.elements.type&&f.elements.type.value==='Supplier';[['name',!sup],['supname',sup]].forEach(([n,on])=>{const el=f.elements[n];if(el){el.disabled=!on;el.classList.toggle('hid',!on);}});}
 document.addEventListener('change',async ev=>{const e=ev.target;
+  if(e&&e.matches&&e.matches('input[data-sales]')){
+    const f=e.files&&e.files[0];if(!f)return;let j;
+    try{j=JSON.parse(await f.text());}catch(_){toast('⚠️ Hindi mabasa ang file','err');e.value='';return;}
+    const rows=Array.isArray(j&&j.rows)?j.rows:[];
+    if(!rows.length||!Array.isArray(rows[0])||rows[0].length!==2){toast('⚠️ Hindi ito ang sales_history.json','err');e.value='';return;}
+    const tot=rows.reduce((t,r)=>t+(+r[1]||0),0);
+    if(!confirm('I-import ang benta ng '+rows.length+' na araw (kabuuan '+peso(tot)+')?\n\nPapalitan nito ang dating kasaysayan ng benta. Hindi gagalaw ang Cash at wallets.')){e.value='';return;}
+    await run({action:'importSales',rows},'Na-import ✓');e.value='';render();return;
+  }
   if(e&&e.matches&&e.matches('input[data-hist]')){
     const f=e.files&&e.files[0];if(!f)return;let j;
     try{j=JSON.parse(await f.text());}catch(_){toast('⚠️ Hindi mabasa ang file','err');e.value='';return;}
