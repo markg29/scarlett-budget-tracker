@@ -117,7 +117,7 @@ main,.card,.bubble{overflow-wrap:anywhere;word-break:break-word}.item>div,.ent>d
 // ====== ISANG BESES LANG: i-paste dito ang Apps Script URL (nagtatapos sa /exec) ======
 const API_URL='https://script.google.com/macros/s/AKfycbyqsMv_r7FbAmSJWvGhMFmHh177hiO2KS6onWPpFovH_HbmoizYhLB2bfHjetTDthIJfA/exec';
 const API_PIN='';
-const NEED_VER=13;const BUILD='nov12-wallets-suppliers';   // pinakabagong bersyon ng Code.gs na kailangan ng app na ito
+const NEED_VER=14;const BUILD='nov13-supplier-history';   // pinakabagong bersyon ng Code.gs na kailangan ng app na ito
 const USER_NAME='Mark';   // pangalan na babatiin ni Kapi   // kung may PIN sa Code.gs, ilagay din dito
 // =======================================================================================
 //#LOGIC-START
@@ -252,11 +252,14 @@ function monthSummary(st,log,pay,ym){
 function supKey(n){return String(n||'').toLowerCase().replace(/[^a-z0-9ñ ]/g,' ').replace(/\s+/g,' ').trim();}
 function supNames(log,pay){const m={};pay.filter(p=>p.type==='Supplier').forEach(p=>{const k=supKey(p.name);if(k&&!m[k])m[k]=String(p.name).trim();});log.forEach(l=>{const k=supKey(l.supplier);if(k&&!m[k])m[k]=String(l.supplier).trim();});return Object.keys(m).map(k=>m[k]);}
 function supCheck(name,known){const k=supKey(name);if(!k)return{name:'',near:null};for(const n of known||[])if(supKey(n)===k)return{name:n,near:null,exact:true};let best=null;(known||[]).forEach(n=>{const d=chatLev(k,supKey(n));if(d<=2&&k.length>=4&&(!best||d<best.d))best={n,d};});return{name:String(name).replace(/\s+/g,' ').trim(),near:best?best.n:null};}
-function stockBudget(st,log,pay,today){
+function stockBudget(st,log,pay,today,hist){
+  hist=Array.isArray(hist)?hist:[];
+  const hMax=hist.reduce((m,x)=>String(x.date)>m?String(x.date):m,''),logCut=log.filter(l=>(+l.stock||0)>0&&l.supplier).reduce((m,l)=>l.date<m?l.date:m,'9999-12-31');
   const m=(+st.margin_pct||0)/100,s30=addDays(today,-29),s90=addDays(today,-89);
   const rows=from=>{const by={};const add=(name,amt)=>{const k=supKey(name);const e=by[k]||(by[k]={name:'',amt:0});if(name&&!e.name)e.name=String(name).trim();e.amt+=amt;};
-    log.filter(l=>l.date>=from&&l.date<=today&&(+l.stock||0)>0).forEach(l=>add(l.supplier||'',+l.stock||0));
-    pay.filter(p=>p.status==='Paid'&&p.type==='Supplier'&&String(p.paidDate)>=from&&String(p.paidDate)<=today).forEach(p=>add(p.name,+p.amount||0));
+    hist.filter(x=>String(x.date)<logCut&&String(x.date)>=from&&String(x.date)<=today).forEach(x=>add(x.supplier,+x.amount||0));
+    log.filter(l=>l.date>=from&&l.date<=today&&(+l.stock||0)>0&&(!hMax||l.date>hMax||l.supplier)).forEach(l=>add(l.supplier||'',+l.stock||0));
+    pay.filter(p=>p.status==='Paid'&&p.type==='Supplier'&&String(p.paidDate)>=from&&String(p.paidDate)<=today&&(!hMax||String(p.paidDate)>hMax)).forEach(p=>add(p.name,+p.amount||0));
     return by;};
   const b30=rows(s30),b90=rows(s90),V=o=>Object.keys(o).map(k=>o[k]);
   const sales30=sum(log.filter(l=>l.date>=s30&&l.date<=today),l=>+l.sales||0),budget=Math.round(sales30*(1-m));
@@ -351,6 +354,10 @@ function walletMgr(){
     form=`<form id="fWal"><input type="hidden" name="wid" value="${w?esc(w.id):''}"><label>Pangalan ng wallet</label><input name="name" required maxlength="40" value="${w?esc(w.name):''}" placeholder="hal. Maya, Bangko">${core?'<div class="sm mute">Ang panimulang halaga ng wallet na ito ay nasa itaas (✏️ Baguhin).</div>':`<label>Panimulang halaga</label><input type="number" name="opening" inputmode="decimal" step="any" min="0" value="${w?esc(w.opening):0}"><label class="chk"><input type="checkbox" name="intotal" ${!w||w.inTotal?'checked':''}> Kasama sa Kabuuang pera</label>`}<div class="grid2"><button class="full">Save</button><button type="button" class="ghost full" data-act="walcancel">Kansel</button></div></form>`;}
   return `<div class="card"><h3>Mga wallet</h3>${rows}${form||'<button class="full" data-act="waledit" data-id="new">+ Dagdag na wallet</button>'}<div class="sm mute" style="margin-top:8px">Pwedeng itago ang wallet kapag zero na ang laman. Ang wallet na may lipat o bayad na ay itatago na lang, hindi mabubura.</div></div>`;
 }
+function histMgr(){
+  const H=S.hist||[],dates=H.map(x=>String(x.date)).sort(),n=H.length;
+  return `<div class="card"><h3>Kasaysayan ng bili sa supplier</h3><div class="sm mute">Pang-budget lang ito (batayan ng limit kada supplier). Hindi nito ginagalaw ang Cash o ang mga wallet.</div>${n?`<div class="row" style="margin-top:8px"><span>Laman ngayon</span><b>${n} na bili</b></div><div class="sm mute">${dlabel(dates[0])} hanggang ${dlabel(dates[n-1])}</div>`:'<div class="mute" style="margin-top:8px">Wala pa.</div>'}<label>I-import ang supplier_malinis.json</label><input type="file" accept=".json,application/json" data-hist><div class="sm mute" style="margin-top:6px">Papalitan nito ang kasaysayan, at idadagdag sa listahan ng supplier ang mga wala pa.</div>${n?'<button class="ghost full" data-act="histclear" style="margin-top:8px">Burahin ang kasaysayan</button>':''}</div>`;
+}
 function supMgr(){
   const L=(S.suppliers||[]).slice().sort((a,b)=>String(a.name).localeCompare(String(b.name))),hist=supNames(S.log,S.pay).filter(n=>!L.some(s=>supKey(s.name)===supKey(n)));
   const rows=L.map(s=>{const id=esc(s.id),on=String(s.active)!=='0';return `<div class="item"><div class="sm"><b>${esc(s.name)}</b>${on?'':' <span class="mute">(nakatago)</span>'}</div><div class="acts"><button class="ghost sm" data-act="supedit" data-id="${id}">✏️</button><button class="ghost sm" data-act="${on?'suphide':'supshow'}" data-id="${id}">${on?'Itago':'Ibalik'}</button><button class="danger sm" data-act="supdel" data-id="${id}">✕</button></div></div>`;}).join('');
@@ -366,7 +373,7 @@ function dlabel(s){return new Date(utc(s)).toLocaleDateString('en-PH',{month:'sh
 function ld(k,d){try{return JSON.parse(localStorage.getItem(k))||d;}catch(e){return d;}}
 
 let cfg=API_URL?{url:API_URL,pin:API_PIN}:ld('pk_cfg',{url:'',pin:''});
-function normS(x){x=x&&typeof x==='object'?x:{};const A=v=>Array.isArray(v)?v.filter(r=>r&&typeof r==='object'):[];return{settings:x.settings&&typeof x.settings==='object'?x.settings:{},log:A(x.log),pay:A(x.pay),transfers:A(x.transfers),wallets:A(x.wallets),suppliers:A(x.suppliers)};}
+function normS(x){x=x&&typeof x==='object'?x:{};const A=v=>Array.isArray(v)?v.filter(r=>r&&typeof r==='object'):[];return{settings:x.settings&&typeof x.settings==='object'?x.settings:{},log:A(x.log),pay:A(x.pay),transfers:A(x.transfers),wallets:A(x.wallets),suppliers:A(x.suppliers),hist:A(x.hist)};}
 let S=normS(ld('pk_cache',null));
 S.transfers=S.transfers||[];setCW(S.wallets);
 let ui={editLog:null,bd:null,pay:null,more:null,setEdit:false,tab:'home',filter:'all',form:false,edit:null,busy:false,logType:'benta',entN:3,emptyWarn:false,chat:null,paidN:10,paidMore:null,paidEdit:null,month:null};
@@ -497,7 +504,7 @@ function renderHome(){
   const mascot=`<div class="mascot ${b}">${mascotSVG(b)}<div class="bubble"><div class="nm">Kapi</div>${msg}${notes.map(n=>`<div class="n">${n}</div>`).join('')}</div></div>`;
   const up=f.events.slice(0,6).map(e=>`<div class="item"><div>${esc(e.name)}<span class="tag ${e.overdue?'od':''}">${e.overdue?'LAMPAS':esc(e.type)}</span><div class="sm mute">${dlabel(e.due)}${e.day>0?' · '+e.day+' araw':''}</div></div><b>${peso(e.amount)}</b></div>`).join('')||'<div class="mute">Walang nakabinbing bayarin.</div>';
 
-  const sb=stockBudget(S.settings,S.log,S.pay,t);
+  const sb=stockBudget(S.settings,S.log,S.pay,t,S.hist);
   const pct=sb.budget>0?Math.min(100,Math.round(sb.spent/sb.budget*100)):0,over=sb.budget>0&&sb.spent>sb.budget;
   const bar=(v,l)=>{const p=l>0?Math.min(100,Math.round(v/l*100)):(v>0?100:0),o=l>0?v>l:v>0;return `<div class="bar"><i style="width:${p}%" class="${o?'over':''}"></i></div>`;};
   const sbRows=sb.list.slice(0,12).map(x=>`<div class="supr"><div class="row"><span>${x.key?esc(x.name):'Hindi nakapangalan'}</span><span>${peso(x.spent)}${x.key&&x.limit?` <span class="mute sm">/ ${peso(x.limit)}</span>`:''}</span></div>${x.key&&x.limit?bar(x.spent,x.limit):''}</div>`).join('');
@@ -677,7 +684,7 @@ function renderSet(){
 <button class="full">I-save at i-test</button></form></div>`;
   const F=[['opening_cash','Panimulang Cash','Cash na hawak mo nung nagsimula ka mag-log'],['opening_gcash','Panimulang GCash','Balance ng GCash wallet nung nagsimula ka'],['opening_drawer','Panimulang Pera ng GCash','Cash sa drawer ng cash-in at load'],['opening_huling','Panimulang Huling Benta','Perang iniwan mo sa store bilang huling benta'],['opening_utang','Panimulang Utang ng iba','Total na utang sa iyo nung nagsimula ka (hindi kasama sa Kabuuang pera)'],['opening_personal','Panimulang Personal','Pera na pang-sarili mo'],['opening_barya','Panimulang Barya','Coins ng store, hiwalay sa Pondo'],['margin_pct','Margin ng tubo (%)','Tantya ng tubo sa benta'],['buffer','Buffer','Pinakamababang pera na gusto mong laging may natitira']];
   if(!ui.setEdit)return conn+`<div class="card"><h3>Pera</h3>${F.map(f=>`<div class="row"><span>${f[1]}<div class="sm mute">${f[2]}</div></span><b>${f[0]==='margin_pct'?(+s[f[0]]||0)+'%':peso(+s[f[0]]||0)}</b></div>`).join('')}
-<button class="ghost full" data-act="setedit">✏️ Baguhin</button></div>${walletMgr()}${supMgr()}`;
+<button class="ghost full" data-act="setedit">✏️ Baguhin</button></div>${walletMgr()}${supMgr()}${histMgr()}`;
   return conn+`<div class="sm mute" style="margin:0 4px 10px">Bersyon ng app: ${BUILD}</div><div class="card"><h3>Baguhin ang Settings</h3><div class="banner warn">Baguhin lang ito kung sigurado ka. Apektado ang lahat ng balance at forecast.</div><form id="fSet">
 ${F.map(f=>`<label>${f[1]} <span class="mute sm">· ${f[2]}</span></label><input type="number" name="${f[0]}" inputmode="decimal" step="any" value="${+s[f[0]]||0}">`).join('')}
 <div class="grid2"><button class="full">I-save</button><button type="button" class="ghost full" data-act="setcancel">Kansel</button></div></form></div>`;
@@ -726,6 +733,7 @@ document.addEventListener('click',async ev=>{
   if(a==='suphide'){await run({action:'setSupplierActive',id,active:false},'Naitago');return;}
   if(a==='supshow'){await run({action:'setSupplierActive',id,active:true},'Naibalik ✓');return;}
   if(a==='supdel'){const s=(S.suppliers||[]).find(x=>x.id===id);if(s&&confirm('Burahin si "'+s.name+'" sa listahan?'))await run({action:'delSupplier',id},'Binura');return;}
+  if(a==='histclear'){if(confirm('Burahin ang kasaysayan ng bili sa supplier? Hindi apektado ang Cash at wallets.'))await run({action:'clearHistory'},'Binura');return;}
   if(a==='supimport'){await run({action:'importSuppliers'},'Naidagdag ✓');return;}
   if(a==='chatok'&&ui.chat&&ui.chat.entries&&!ui.chat.errors.length){const c=ui.chat;let n=0;while(c.entries.length){const e=c.entries[0],F=e.fields;const ok=await run({action:'addLog',date:e.date,sales:F.sales,stock:F.stock,opex:F.opex,cashin:F.cashin,cashout:F.cashout,fee:F.fee,cofee:F.cofee,gsales:0,loadsale:F.loadsale,loadcost:F.loadcost,gstock:F.gstock,gopex:F.gopex,supplier:F.supplier,notes:e.notes},c.entries.length===1?(n+1)+' entry ang na-save ni Kapi ✓':undefined);if(!ok){c.items=c.entries.map(x=>Object.assign({date:x.date},x.item));render();return;}c.entries.shift();n++;}ui.chat=null;render();return;}
   if(a==='resetcache'){try{localStorage.removeItem('pk_cache');}catch(_){}location.reload();return;}
@@ -760,6 +768,15 @@ document.addEventListener('click',async ev=>{
 
 function billType(f){const sup=f.elements.type&&f.elements.type.value==='Supplier';[['name',!sup],['supname',sup]].forEach(([n,on])=>{const el=f.elements[n];if(el){el.disabled=!on;el.classList.toggle('hid',!on);}});}
 document.addEventListener('change',async ev=>{const e=ev.target;
+  if(e&&e.matches&&e.matches('input[data-hist]')){
+    const f=e.files&&e.files[0];if(!f)return;let j;
+    try{j=JSON.parse(await f.text());}catch(_){toast('⚠️ Hindi mabasa ang file','err');e.value='';return;}
+    const rows=Array.isArray(j&&j.rows)?j.rows:[];
+    if(!rows.length){toast('⚠️ Walang laman ang file','err');e.value='';return;}
+    const names=new Set(rows.map(r=>supKey(r[1]))).size,tot=rows.reduce((t,r)=>t+(+r[2]||0),0);
+    if(!confirm('I-import ang '+rows.length+' na bili mula sa '+names+' supplier (kabuuan '+peso(tot)+')?\n\nPapalitan nito ang dating kasaysayan. Hindi gagalaw ang Cash at wallets.')){e.value='';return;}
+    await run({action:'importHistory',rows},'Na-import ✓');e.value='';render();return;
+  }
   if(e&&e.id==='monthSel'){ui.month=e.value===todayStr().slice(0,7)?null:e.value;render();return;}
   if(e&&e.name==='type'&&e.form&&e.form.id==='fBill'){billType(e.form);return;}
   if(e&&e.matches&&e.matches('select[data-sup]')&&e.value==='__new'){
