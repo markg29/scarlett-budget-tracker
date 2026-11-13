@@ -80,6 +80,51 @@ nav button.on{background:var(--pri);color:#fff}
 .mascot.warn .bubble .nm{color:var(--warn)}.mascot.bad .bubble .nm{color:var(--bad)}
 .bubble .n{font-size:12.5px;color:var(--mute);margin-top:5px}
 .supr2{border-top:1px dashed var(--line)}.supr2 summary{list-style:none;cursor:pointer;display:flex;align-items:center;gap:8px;padding:11px 0}.supr2 summary::-webkit-details-marker{display:none}.supr2 .sn{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-weight:600}.supr2 .sa{font-weight:700}.supr2 summary{flex-wrap:wrap;row-gap:6px}.pw{flex-basis:100%;font-size:13px;color:var(--mute)}.pw b{color:var(--ink)}.pw.neg b{color:#c0392b}.pw.am2 b{color:#a8741a}.pb{flex-basis:100%;height:7px;background:var(--soft,#f3ecdc);border-radius:99px;overflow:hidden}.pb i{display:block;height:100%;border-radius:99px}.supr2 .bd{padding:0 0 10px;display:grid;gap:3px}.chip{font-size:11px;font-weight:700;padding:2px 7px;border-radius:99px;white-space:nowrap}.chip.ok{color:var(--pri-d);background:#e3f1e8}.chip.am{color:#a8741a;background:#fdf0d5}.chip.bad{color:var(--bad);background:var(--badbg)}
+
+/* ===== polish + responsive (v19) ===== */
+body{font-variant-numeric:tabular-nums lining-nums}
+.big{font-size:clamp(32px,9vw,42px)}
+.card{padding:clamp(14px,4vw,20px);border-radius:clamp(18px,5vw,24px);transition:box-shadow .2s}
+.card h3{font-size:clamp(16px,4.4vw,18px)}
+.tile{border:1px solid var(--line);background:linear-gradient(180deg,#fffdf8,var(--soft))}
+.tile b{font-size:clamp(17px,5vw,21px)}
+button.sm{min-height:36px}
+nav button,.seg button,.chips .chip{min-height:44px}
+.chips .chip{display:inline-flex;align-items:center}
+.pb,.bar{height:9px}
+.supr2 summary{min-height:48px}
+.supr2[open]{background:linear-gradient(180deg,rgba(246,240,227,.6),transparent);border-radius:12px}
+.supr2[open] summary{padding-left:6px;padding-right:6px}.supr2[open] .bd{padding-left:6px;padding-right:6px}
+.grp summary{min-height:48px}
+header{padding-top:calc(10px + env(safe-area-inset-top));padding-left:max(16px,env(safe-area-inset-left));padding-right:max(16px,env(safe-area-inset-right))}
+main{padding-left:max(14px,env(safe-area-inset-left));padding-right:max(14px,env(safe-area-inset-right))}
+.chips{scrollbar-width:none;padding-bottom:2px}.chips::-webkit-scrollbar{display:none}
+.two{display:block}.two.ord{display:flex;flex-direction:column}.two.ord>.colL,.two.ord>.colR{display:contents}.two.ord .g1{order:1}.two.ord .g3{order:2}.two.ord .g2{order:3}.two.ord .g4{order:4}
+img,svg{max-width:100%}
+input,select,textarea{min-width:0}
+@media (max-width:340px){.grid2{gap:8px}.tile{padding:9px 10px}.big{font-size:30px}.row{gap:6px}nav button{font-size:10.5px}}
+@media (min-width:720px){
+  main{max-width:1000px;padding-top:20px}
+  header{padding-left:max(20px,calc((100% - 1000px)/2 + 20px));padding-right:max(20px,calc((100% - 1000px)/2 + 20px))}
+  .two,.two.ord{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);column-gap:18px;align-items:start}.two.ord>.colL,.two.ord>.colR{display:block}
+  #app[data-tab=log]{max-width:640px;margin-left:auto;margin-right:auto}
+  #app[data-tab=set]{column-count:2;column-gap:18px}#app[data-tab=set]>*{break-inside:avoid}
+  nav{max-width:520px}
+  .hello h2{font-size:32px}
+  #toast{max-width:480px}
+}
+@media (min-width:1100px){
+  body{padding-left:112px;padding-bottom:28px}
+  nav{top:92px;bottom:auto;left:18px;right:auto;width:84px;max-width:none;margin:0;flex-direction:column;padding:8px;border-radius:26px}
+  nav button{padding:12px 0 10px}
+  header{padding-left:max(20px,calc((100% - 1100px)/2 + 20px));padding-right:max(20px,calc((100% - 1100px)/2 + 20px))}
+  main{max-width:1100px}
+  .two{grid-template-columns:minmax(0,1fr) minmax(0,1.15fr);column-gap:22px}
+  #toast{bottom:28px}
+}
+@media (min-width:1500px){main{max-width:1240px}header{padding-left:max(20px,calc((100% - 1240px)/2 + 20px));padding-right:max(20px,calc((100% - 1240px)/2 + 20px))}}
+@media (max-height:520px) and (orientation:landscape) and (max-width:1099px){body{padding-bottom:84px}nav{padding:3px}nav button{min-height:38px;padding:4px 0}nav button svg{width:20px;height:20px}}
+@media (hover:hover){.card:hover{box-shadow:0 12px 28px -14px rgba(110,74,42,.45)}button:not(:disabled):hover{filter:brightness(1.04)}button.ghost:hover{filter:none;background:#efe7d5}.supr2 summary:hover,.grp summary:hover{background:rgba(246,240,227,.5)}}
 .hid{display:none!important}label.chk{display:flex;gap:8px;align-items:center;font-weight:500}label.chk input{width:auto;margin:0}
 .tile{background:var(--soft);border-radius:16px;padding:11px 12px}
 .tile .sm{font-weight:700}.tile b{font:600 18px var(--disp)}
@@ -118,7 +163,7 @@ main,.card,.bubble{overflow-wrap:anywhere;word-break:break-word}.item>div,.ent>d
 // ====== ISANG BESES LANG: i-paste dito ang Apps Script URL (nagtatapos sa /exec) ======
 const API_URL='https://script.google.com/macros/s/AKfycbyqsMv_r7FbAmSJWvGhMFmHh177hiO2KS6onWPpFovH_HbmoizYhLB2bfHjetTDthIJfA/exec';
 const API_PIN='';
-const NEED_VER=17;const BUILD='nov13-v18b';   // pinakabagong bersyon ng Code.gs na kailangan ng app na ito
+const NEED_VER=17;const BUILD='nov13-v19';   // pinakabagong bersyon ng Code.gs na kailangan ng app na ito
 const USER_NAME='Mark';   // pangalan na babatiin ni Kapi   // kung may PIN sa Code.gs, ilagay din dito
 // =======================================================================================
 //#LOGIC-START
@@ -483,7 +528,8 @@ function walletMgr(){
 function mbRows(){
   const P=window.__P;if(!P||!P.ok)return'';
   const q=(ui.supQ||'').trim().toLowerCase(),all=!!ui.budAll;
-  return P.rows.map((x,i)=>{
+  const order=P.rows.map((x,i)=>({x,i})).sort((a,b)=>((b.x.fund>0?1:0)-(a.x.fund>0?1:0))||(a.i-b.i)).map(o=>o.x);
+  return order.map((x,i)=>{
     const v=x.visit,vis=!q?(all||i<8):x.name.toLowerCase().includes(q);
     const pw=x.reserve>0?`<span class="pw ${x.fund<=0?'neg':x.short>0?'am2':''}">Pwede pang bilhin: <b>${peso(x.fund)}</b>${x.short>0?' sa '+peso(x.reserve)+' na inaasahan':''}</span>`:'<span class="pw">Wala nang inaasahang bisita ngayong buwan</span>';
     const tot=x.spent+x.reserve,pc=tot>0?Math.min(100,Math.round(x.spent/tot*100)):0,col=x.short7>0?'#c0392b':x.short>0?'#d9a441':'var(--pri)';
@@ -534,10 +580,10 @@ ${row('<b>Pera na pwedeng gamitin</b>'+(cash-P.dueAll-bufv<0?' <span class="mute
 ${row('Inaasahang bili sa susunod na 7 araw',peso(P.reserve7))}
 ${row('<b>'+(cShort?'Kulang ang pera':'Sobra sa pera')+'</b>',peso(Math.abs(P.cashSurplus)),cShort?'neg':'pos')}
 <div class="sm mute" style="margin-top:8px">Kasama ang stock na nilog at ang bayad sa supplier. Kapag nilog mo ang stock at binayaran din ang bill nito, madodoble. Ang "Hindi nakapangalan" ay stock na walang supplier.</div></div></details>`;
-  const n=P.rows.length,more=n>8&&!ui.supQ?`<button class="ghost full" id="budMore" style="margin-top:8px" data-act="budall">${ui.budAll?'Ipakita ang top 8 lang':'Ipakita lahat ('+n+' supplier)'}</button>`:'';
+  const n=P.rows.length,nOk=P.rows.filter(x=>x.fund>0).length,more=n>8&&!ui.supQ?`<button class="ghost full" id="budMore" style="margin-top:8px" data-act="budall">${ui.budAll?'Ipakita ang top 8 lang':'Ipakita lahat ('+n+' supplier)'}</button>`:'';
   const un=P.unnamed>0?`<div class="row" style="border-top:1px dashed var(--line);border-bottom:0"><span class="mute">Hindi nakapangalan</span><span>${peso(P.unnamed)}</span></div>`:'';
   return `<div class="card"><h3>Budget sa stock <span class="mute sm">(${mname})</span></h3>${obar}${tiles}${safeRow}${warn}${low}${calD}${how}
-<div class="sub" style="margin-top:12px">Mga supplier <span class="mute sm">(${n}) · bar: nabili na ÷ inaasahang bili ngayong buwan</span></div>
+<div class="sub" style="margin-top:12px">Mga supplier <span class="mute sm">(${n}) · ${nOk} ang pwede pang bumili</span></div><div class="sm mute">Nauuna ang may pondo pa. Ang bar ay nabili na ÷ inaasahang bili ngayong buwan.</div>
 <input type="search" id="supQ" placeholder="Hanapin ang supplier..." autocomplete="off" value="${esc(ui.supQ||'')}" style="margin:6px 0">
 <div id="supList2">${mbRows()}</div><div id="supNone" class="mute sm hid" style="padding:8px 0">Walang nakitang supplier.</div>${un}${more}</div>`;
 }
@@ -743,7 +789,7 @@ function renderHome(){
   }
   const dueS=S.pay.filter(p=>p.status!=='Paid'&&String(p.due)<=addDays(t,3)).sort((a,b)=>String(a.due).localeCompare(String(b.due)));
   const dueB=dueS.length?`<button class="banner warn" data-tab="bills" style="width:100%;text-align:left;border:0;font:inherit;margin-bottom:12px;display:block"><b>${dueS.length} bayarin</b> ang ${dueS.some(p=>String(p.due)<t)?'lampas na o ':''}due sa loob ng 3 araw · ${peso(sum(dueS,p=>+p.amount||0))}<div class="sm" style="margin-top:4px">${dueS.slice(0,3).map(p=>esc(p.name)+' ('+(String(p.due)<t?'lampas':String(p.due)===t?'ngayon':dlabel(p.due))+')').join(', ')}${dueS.length>3?' at '+(dueS.length-3)+' pa':''}</div></button>`:'';
-  return `${hello}${mascot}${dueB}<div class="card"><h3>Kabuuang pera</h3><div class="big ${cls(f.cash0)}">${peso(f.cash0)}</div>
+  return `<div class="two"><div>${hello}${mascot}${dueB}<div class="card"><h3>Kabuuang pera</h3><div class="big ${cls(f.cash0)}">${peso(f.cash0)}</div>
 ${tiles()}
 ${ui.bd?`<div class="bdbox"><b>Paano nabuo ang ${esc(bdW().name)}</b>${breakdown(S.settings,S.log,S.pay,S.transfers,ui.bd).map(x=>`<div class="row"><span>${x[0]}</span><span class="${x[1]<0?'neg':''}">${x[1]<0?'−':''}${peso(Math.abs(x[1]))}</span></div>`).join('')}<div class="row"><b>Kabuuan</b><b>${peso(wbal(calcWallets(S.settings,S.log,S.pay,S.transfers),bdW()))}</b></div><div class="sm mute">Kung may mali, hanapin dito kung alin ang sobra o kulang, tapos burahin o ayusin ang entry.</div>${ui.bd==='drawer'&&f.drawer>0?`<button class="full" style="margin-top:10px" data-act="drawer2cash">Ilipat ang ${peso(f.drawer)} sa Cash</button>`:''}</div>`:''}
 <div class="sm mute">Pwede mong kunin (personal) bukod sa nakalistang bayarin: <b>${peso(f.safe)}</b></div>
@@ -771,7 +817,7 @@ ${ui.bd?`<div class="bdbox"><b>Paano nabuo ang ${esc(bdW().name)}</b>${breakdown
 <div class="row"><span class="mute">Labas ng pera sa store (stock + gastos)</span><span>${peso(m.storeOut)}</span></div>
 <div class="row"><span>Net ng store <span class="mute sm">(pera, hindi tubo)</span></span><b class="${cls(m.storeNet)}">${peso(m.storeNet)}</b></div>
 <div class="row"><span>Tantyang tubo (${+S.settings.margin_pct||0}% margin)</span><b class="${cls(m.estProfit)}">${peso(m.estProfit)}</b></div>
-${verdict?`<div class="sm" style="margin-top:8px">${verdict}</div>`:''}</div>${cashCard()}${budgetCard}`;
+${verdict?`<div class="sm" style="margin-top:8px">${verdict}</div>`:''}</div></div><div>${cashCard()}${budgetCard}</div></div>`;
 }
 
 function logFields(t){
@@ -912,9 +958,8 @@ ${e?'':`<label>Bayad na ba ngayon?</label><select name="paynow">${opt([['','Hind
   }else lists=sec(F==='Personal'?'Personal':F,open);
   const AG=aging(S.pay,t),agCard=AG.total>0?`<div class="card"><h3>Bayarin ayon sa petsa</h3><div class="row" style="border:0;padding:0"><span>Kabuuan</span><b>${peso(AG.total)}</b></div><div class="sm mute">Utang sa supplier: <b>${peso(AG.sup)}</b></div>${AG.buckets.filter(b=>b.tot>0).map(b=>`<div style="padding:8px 0;border-top:1px dashed var(--line)"><div class="row" style="border:0;padding:0"><span class="${b.l==='Lampas na'?'neg':''}">${b.l}</span><b>${peso(b.tot)}</b></div><div class="pb" style="margin:5px 0 3px"><i style="width:${Math.round(b.tot/AG.total*100)}%;background:${b.l==='Lampas na'?'#c0392b':'var(--pri)'}"></i></div><div class="sm mute">${b.n} bayarin${b.sup>0?' · supplier '+peso(b.sup):''}</div></div>`).join('')}</div>`:'';
   const loanCard=LN.length?`<div class="card"><h3>Mga utang na hulugan</h3>${LN.map(x=>`<div style="padding:8px 0;border-top:1px dashed var(--line)"><div class="row" style="border:0;padding:0"><b>${esc(x.name)}</b><b class="${x.finished?'pos':''}">${x.finished?'Bayad na ✓':peso(x.bal)+' natira'}</b></div><div class="pb" style="margin:6px 0 4px"><i style="width:${x.pct}%;background:var(--pri)"></i></div><div class="sm mute">Nahulugan ${peso(x.done)} ng ${peso(x.total)} (${x.pct}%)${x.n?' · '+x.n+' hulog sa Kapi':''}${x.before>0?' · '+peso(x.before)+' bago ang Kapi':''}</div>${x.finished?'':`<div class="sm mute">${x.per>0?'Mga '+x.left+' hulog pa na '+peso(x.per):''}${x.next?' · susunod: '+dlabel(x.next):''}</div>`}</div>`).join('')}</div>`:'';
-  return `${paidForm}${form}<div class="card"><button class="full" style="margin:0" data-act="newbill">+ Dagdag na bayarin</button></div>${loanCard}
-<div class="chips">${chips}</div>${agCard}${lists}
-<div class="card"><h3>Nabayaran na (${paidAll})</h3>${paidShow.map(p=>`<div class="paidrow"><div class="row"><span>${esc(p.name)} <span class="sm mute">${dlabel(p.paidDate)} · ${esc(wname(p.wallet||''))}${p.notes==='Hulog'?' · hulog':''}</span></span><span>${peso(p.amount)} <button class="ghost sm more" data-act="paidmore" data-id="${esc(p.id)}" aria-label="Iba pa">⋯</button></span></div>${ui.paidMore===p.id?`<div class="acts"><button class="ghost sm" data-act="paidedit" data-id="${esc(p.id)}">Edit</button>${p.notes==='Hulog'?'':`<button class="ghost sm" data-act="paidundo" data-id="${esc(p.id)}">Ibalik sa hindi pa bayad</button>`}<button class="danger sm" data-act="paiddel" data-id="${esc(p.id)}">Burahin</button></div>`:''}</div>`).join('')||'<div class="mute">Wala pa.</div>'}${paidAll>paidShow.length?`<button class="ghost full" style="margin-top:10px" data-act="paidmoreall">Ipakita pa (${paidAll-paidShow.length})</button>`:(ui.paidN>10&&paidAll>10?'<button class="ghost full" style="margin-top:10px" data-act="paidless">Ipakita ang huling 10 lang</button>':'')}</div>`;
+  return `<div class="two ord"><div class="colL"><div class="g1">${paidForm}${form}<div class="card"><button class="full" style="margin:0" data-act="newbill">+ Dagdag na bayarin</button></div></div><div class="g2"><div class="chips">${chips}</div>${lists}</div></div><div class="colR"><div class="g3">${loanCard}${agCard}</div><div class="g4">
+<div class="card"><h3>Nabayaran na (${paidAll})</h3>${paidShow.map(p=>`<div class="paidrow"><div class="row"><span>${esc(p.name)} <span class="sm mute">${dlabel(p.paidDate)} · ${esc(wname(p.wallet||''))}${p.notes==='Hulog'?' · hulog':''}</span></span><span>${peso(p.amount)} <button class="ghost sm more" data-act="paidmore" data-id="${esc(p.id)}" aria-label="Iba pa">⋯</button></span></div>${ui.paidMore===p.id?`<div class="acts"><button class="ghost sm" data-act="paidedit" data-id="${esc(p.id)}">Edit</button>${p.notes==='Hulog'?'':`<button class="ghost sm" data-act="paidundo" data-id="${esc(p.id)}">Ibalik sa hindi pa bayad</button>`}<button class="danger sm" data-act="paiddel" data-id="${esc(p.id)}">Burahin</button></div>`:''}</div>`).join('')||'<div class="mute">Wala pa.</div>'}${paidAll>paidShow.length?`<button class="ghost full" style="margin-top:10px" data-act="paidmoreall">Ipakita pa (${paidAll-paidShow.length})</button>`:(ui.paidN>10&&paidAll>10?'<button class="ghost full" style="margin-top:10px" data-act="paidless">Ipakita ang huling 10 lang</button>':'')}</div></div></div></div>`;
 }
 
 function renderSet(){
@@ -943,6 +988,7 @@ function render(){
   const y=window.scrollY;
   const warn=srvVer!==null&&srvVer<NEED_VER?`<div class="banner warn">⚠️ Luma pa ang Code.gs mo (v${srvVer}, kailangan v${NEED_VER}). Gagana ang karamihan, pero may mga bagong feature na hindi pa gagana. I-paste ang bagong Code.gs sa Apps Script, tapos <b>Deploy → Manage deployments → Edit → New version → Deploy</b>.</div>`:'';
   const ew=ui.emptyWarn?'<div class="banner warn">⚠️ Walang laman ang Google Sheet na nakakonekta, pero may data sa phone mo. Hindi ko binura ang kopya. Tingnan kung tamang Sheet at Apps Script deployment ang gamit (Settings → URL). <button class="ghost sm" data-act="acceptempty">Tanggapin na walang laman</button></div>':'';
+  $('#app').dataset.tab=ui.tab;
   try{$('#app').innerHTML=ew+warn+(ui.tab==='home'?renderHome():ui.tab==='log'?renderLog():ui.tab==='bills'?renderBills():renderSet());}
   catch(e){console.error(e);$('#app').innerHTML='<div class="card"><h3>May problema sa pagpapakita</h3><div class="sm mute">Hindi nawala ang data mo sa Google Sheet. Pindutin ang button para i-clear ang naka-save na kopya sa phone at mag-load ulit.</div><button class="full" style="margin-top:10px" data-act="resetcache">I-reset at mag-load ulit</button><div class="sm mute" style="margin-top:8px">'+esc(String(e&&e.message||e))+'</div></div>';}
   window.scrollTo(0,y);
