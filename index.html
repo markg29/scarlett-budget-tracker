@@ -163,7 +163,7 @@ main,.card,.bubble{overflow-wrap:anywhere;word-break:break-word}.item>div,.ent>d
 // ====== ISANG BESES LANG: i-paste dito ang Apps Script URL (nagtatapos sa /exec) ======
 const API_URL='https://script.google.com/macros/s/AKfycbyqsMv_r7FbAmSJWvGhMFmHh177hiO2KS6onWPpFovH_HbmoizYhLB2bfHjetTDthIJfA/exec';
 const API_PIN='';
-const NEED_VER=17;const BUILD='nov13-v19b';   // pinakabagong bersyon ng Code.gs na kailangan ng app na ito
+const NEED_VER=17;const BUILD='nov13-v19d';   // pinakabagong bersyon ng Code.gs na kailangan ng app na ito
 const USER_NAME='Mark';   // pangalan na babatiin ni Kapi   // kung may PIN sa Code.gs, ilagay din dito
 // =======================================================================================
 //#LOGIC-START
@@ -242,11 +242,13 @@ function salesDays(log,today,N){
   return new Set(log.filter(l=>l.date>=start&&l.date<=today&&(+l.sales||0)>0).map(l=>l.date)).size;
 }
 function avgNet(log,today,N){
-  const start=addDays(today,-(N-1));
-  const rec=log.filter(l=>l.date>=start&&l.date<=today);
-  if(!rec.length||salesDays(log,today,N)<3)return 0; // kulang pa ang data: huwag mag-extrapolate
+  // kung wala pang benta na nalog ngayong araw, hanggang kahapon lang ang bilang (para hindi mabawasan ang average ng araw na hindi pa tapos)
+  const end=log.some(l=>l.date===today&&(+l.sales||0)>0)?today:addDays(today,-1);
+  const start=addDays(end,-(N-1));
+  const rec=log.filter(l=>l.date>=start&&l.date<=end);
+  if(!rec.length||salesDays(log,end,N)<3)return 0; // kulang pa ang data: huwag mag-extrapolate
   const first=rec.reduce((m,l)=>l.date<m?l.date:m,rec[0].date);
-  return sum(rec,l=>(+l.sales||0)+gKita(l)-(+l.stock||0)-(+l.opex||0))/(diffDays(first,today)+1);
+  return sum(rec,l=>(+l.sales||0)+gKita(l)-(+l.stock||0)-(+l.opex||0))/(diffDays(first,end)+1);
 }
 function stockStats(log,today){
   const start=addDays(today,-27),L=log.filter(l=>l.date>=start&&l.date<=today&&(+l.stock||0)>0);
@@ -391,7 +393,7 @@ function dailySales(log,shist){
 function monthPlan(st,log,pay,hist,today,cash,shist){
   hist=Array.isArray(hist)?hist:[];
   const ms=today.slice(0,8)+'01',y=+today.slice(0,4),mo=+today.slice(5,7),dim=new Date(Date.UTC(y,mo,0)).getUTCDate(),dayNo=+today.slice(8,10);
-  const mrg=(+st.margin_pct||0)/100,buf=+st.buffer||0;
+  const BUY=0.85,buf=+st.buffer||0; // pambili = 85% ng tantyang benta (base sa totoong bili mo kontra benta, 78-90%)
   const daily=dailySales(log,shist),w28=addDays(today,-27),sd={};Object.keys(daily).filter(d=>d>=w28&&d<=today).forEach(d=>{sd[d]=daily[d];});
   const nd=Object.keys(sd).length;if(nd<3)return{ok:false};
   const avgDaily=Object.keys(sd).reduce((t,k)=>t+sd[k],0)/nd;
@@ -399,7 +401,7 @@ function monthPlan(st,log,pay,hist,today,cash,shist){
   const daysLeft=dim-dayNo+(todayHas?0:1),remDays=[];for(let i=0;i<daysLeft;i++)remDays.push(addDays(today,todayHas?i+1:i));
   const SAFE=0.95;let futureSales=avgDaily*daysLeft*SAFE,lowWeek=null,rhythm=false;
   {const w7=Object.keys(sd).filter(d=>d>addDays(today,-7));if(w7.length>=4){const a7=w7.reduce((t,d)=>t+sd[d],0)/w7.length;if(a7<0.85*avgDaily)lowWeek={act:Math.round(a7),exp:Math.round(avgDaily)};}}
-  const proj=Math.round(soFar+futureSales),budget=Math.round(proj*(1-mrg));
+  const proj=Math.round(soFar+futureSales),budget=Math.round(proj*BUY);
   const sp=supSpend(log,pay,hist,today,ms),vis=supVisits(log,pay,hist,today),end14=addDays(today,14),dueBy={};
   const un=pay.filter(p=>p.status!=='Paid'&&String(p.due)<=end14);
   const counted=p=>{const d=buyDate(p);return !!d&&p.status!=='Paid'&&d>=ms&&d<=today&&(!hMaxP||d>hMaxP);},hMaxP=hist.reduce((m,x)=>String(x.date)>m?String(x.date):m,'');
@@ -564,7 +566,7 @@ function mbCard(t){
   const how=`<details class="grp"><summary>Paano nakuwenta</summary><div style="padding:0 14px 12px">
 ${hd(1,'Budget ng buwan')}${cap('Ito ang pwede mong ipambili ngayong buwan.')}
 ${row('Tantyang benta ng buwan',peso(P.proj))}${cap('Benta na '+peso(P.soFar)+' + tantya sa natitirang '+P.daysLeft+' araw ('+peso(P.future)+')')}
-${row('Budget sa pambili <span class="mute sm">(binawasan ng '+(+S.settings.margin_pct||0)+'% margin)</span>',peso(P.budget))}
+${row('Budget sa pambili <span class="mute sm">(85% ng tantyang benta)</span>',peso(P.budget))}
 ${row('Nabili na ngayong buwan','− '+peso(P.spentM))}
 ${P.dueSup>0?row('Bayarin sa supplier <span class="mute sm">(14 araw)</span>','− '+peso(P.dueSup)):''}
 ${row('<b>Natirang budget</b>',peso(P.R),P.R<0?'neg':'')}
@@ -754,7 +756,7 @@ function renderHome(){
   const msel=`<select id="monthSel" aria-label="Pumili ng buwan">${[...ms].sort().reverse().map(k=>`<option value="${k}" ${k===ym?'selected':''}>${k===cur?'Ngayong buwan · ':''}${mlab(k)}</option>`).join('')}</select>`;
   const buf=+S.settings.buffer||0;
   let b='ok',msg='Okay ang pera mo sa susunod na 30 araw 👍';
-  if(f.firstNeg){b='bad';msg=`⚠️ Kukulangin ka sa <b>${dlabel(f.firstNeg.date)}</b> (${peso(f.firstNeg.bal)}). Kailangan mo pa ng <b>${peso(buf-f.min)}</b> para safe.${f.lowData?' <span class="mute">(Bayarin lang ang binilang, wala pang kita.)</span>':''}`;}
+  if(f.firstNeg){b='bad';msg=`⚠️ Kukulangin ka sa <b>${dlabel(f.firstNeg.date)}</b> (${peso(Math.round(f.firstNeg.bal))}). Kailangan mo pa ng <b>${peso(Math.ceil(buf-f.min))}</b> para safe.${f.lowData?' <span class="mute">(Bayarin lang ang binilang, wala pang kita.)</span>':''}`;}
   else if(f.min<buf){b='warn';msg=`Manipis ang pera sa <b>${dlabel(f.minDate)}</b> (${peso(f.min)}), mas mababa sa buffer mo na ${peso(buf)}.`;}
   const recent=S.log.some(l=>l.date>=addDays(t,-14));
   const notes=[];
