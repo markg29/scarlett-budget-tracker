@@ -163,7 +163,7 @@ main,.card,.bubble{overflow-wrap:anywhere;word-break:break-word}.item>div,.ent>d
 // ====== ISANG BESES LANG: i-paste dito ang Apps Script URL (nagtatapos sa /exec) ======
 const API_URL='https://script.google.com/macros/s/AKfycbyqsMv_r7FbAmSJWvGhMFmHh177hiO2KS6onWPpFovH_HbmoizYhLB2bfHjetTDthIJfA/exec';
 const API_PIN='';
-const NEED_VER=17;const BUILD='nov13-v20';   // pinakabagong bersyon ng Code.gs na kailangan ng app na ito
+const NEED_VER=17;const BUILD='nov13-v23';   // pinakabagong bersyon ng Code.gs na kailangan ng app na ito
 const USER_NAME='Mark';   // pangalan na babatiin ni Kapi   // kung may PIN sa Code.gs, ilagay din dito
 // =======================================================================================
 //#LOGIC-START
@@ -372,6 +372,18 @@ function cashCal(P,log,pay,today,cash,buf,days){
     rows.push({d,bal,bills:bills.map(p=>({name:p.name,amt:+p.amount||0})),out});
   }
   return{rows,min,minDate,lowDate,low:lowDate!==null,inflow,buyRate:cashRate+creditRate,cashRate,creditRate,terms,opexRate,start:cash};
+}
+// "Subukan muna": ginagaya ang isang bili nang hindi sine-save. Kinukuwenta ulit ang budget at pera na parang nabili na ito.
+function simBuy(st,log,pay,hist,shist,tr,today,sup,amt,mode,terms){
+  amt=+amt||0;terms=Math.max(0,Math.round(+terms||0));
+  const buf=+st.buffer||0,run=pp=>{const cash=calcWallets(st,log,pp,tr).total,P=monthPlan(st,log,pp,hist,today,cash,shist);return{P,cash,CC:cashCal(P,log,pp,today,cash,buf,14)};};
+  const A=run(pay);if(!A.P.ok||!(amt>0)||!supKey(sup))return{ok:false};
+  const cashMode=mode==='cash';
+  const row={id:'__sim',type:'Supplier',name:sup,amount:amt,due:cashMode?today:addDays(today,terms),repeat:'none',status:cashMode?'Paid':'Unpaid',paidDate:cashMode?today:'',wallet:cashMode?'Cash':'',notes:'sim',receipt:today};
+  const B=run(pay.concat([row])),k=supKey(sup),sa=A.P.rows.find(r=>r.key===k)||null,sb=B.P.rows.find(r=>r.key===k)||null;
+  const side=(X,s)=>({budget:X.P.budget,R:X.P.R,used:r2(X.P.spentM+X.P.dueSup),ratio:X.P.ratio,surplus:X.P.surplus,cash:X.cash,min:X.CC.min,minDate:X.CC.minDate,low:X.CC.low,pool7:X.P.cashPool,cashSurplus:X.P.cashSurplus,reserve:s?s.reserve:0,fund:s?s.fund:0,spent:s?s.spent:0});
+  return{ok:true,amt,mode:cashMode?'cash':'credit',terms,sup,before:side(A,sa),after:side(B,sb),buf,
+    overSup:!!(sa&&sa.reserve>0&&amt>sa.fund),overBudget:amt>A.P.R};
 }
 function aging(pay,today){
   const B=[['Lampas na'],['Sa loob ng 7 araw'],['8 hanggang 14 araw'],['15 hanggang 21 araw'],['22 hanggang 30 araw'],['Mahigit 30 araw']].map(x=>({l:x[0],tot:0,sup:0,n:0}));
@@ -605,7 +617,7 @@ ${row('<b>'+(cShort?'Kulang ang pera':'Sobra sa pera')+'</b>',peso(Math.abs(P.ca
 <div class="sm mute" style="margin-top:8px">Kasama ang stock na nilog at ang bayad sa supplier. Kapag nilog mo ang stock at binayaran din ang bill nito, madodoble. Ang "Hindi nakapangalan" ay stock na walang supplier.</div></div></details>`;
   const n=P.rows.length,nOk=P.rows.filter(x=>x.fund>0).length,more=n>8&&!ui.supQ?`<button class="ghost full" id="budMore" style="margin-top:8px" data-act="budall">${ui.budAll?'Ipakita ang top 8 lang':'Ipakita lahat ('+n+' supplier)'}</button>`:'';
   const un=P.unnamed>0?`<div class="row" style="border-top:1px dashed var(--line);border-bottom:0"><span class="mute">Hindi nakapangalan</span><span>${peso(P.unnamed)}</span></div>`:'';
-  return `<div class="card"><h3>Budget sa stock <span class="mute sm">(${mname})</span></h3>${obar}${tiles}${safeRow}${warn}${low}${calD}${how}
+  return `<div class="card"><h3>Budget sa stock <span class="mute sm">(${mname})</span></h3>${obar}${tiles}${safeRow}${warn}${low}${simCard(P)}${calD}${how}
 <div class="sub" style="margin-top:12px">Mga supplier <span class="mute sm">(${n}) · ${nOk} ang may inaasahang bili pa</span></div><div class="sm mute">${P.ratio<1?'Kasya ang budget sa <b>'+Math.round(P.ratio*100)+'%</b> ng inaasahang bili. Hinati nang pantay sa lahat ng supplier ang kulang. ':''}Ang bar ay nabili na ÷ inaasahang bili ngayong buwan.</div>
 <input type="search" id="supQ" placeholder="Hanapin ang supplier..." autocomplete="off" value="${esc(ui.supQ||'')}" style="margin:6px 0">
 <div id="supList2">${mbRows()}</div><div id="supNone" class="mute sm hid" style="padding:8px 0">Walang nakitang supplier.</div>${un}${more}</div>`;
@@ -642,6 +654,47 @@ function cashCard(){
   return `<details class="grp"><summary>🧮 Bilang ng Cash sa dulo ng araw</summary><div style="padding:0 14px 12px"><div class="sm mute">Ayon sa Kapi: <b>${peso(cash)}</b>. Bilangin ang Cash sa kamay at ilagay dito.</div>
 <input type="number" id="cashCount" inputmode="decimal" min="0" step="any" placeholder="Binilang na Cash" style="margin-top:8px"><div id="cashDiff" class="sm" style="margin:8px 0"></div><button class="full hid" id="cashFix" data-act="cashfix">I-ayos ang Cash sa binilang</button>
 ${hist.length?`<div class="sm mute" style="margin-top:8px">Pagkakaiba nitong 30 araw: <b class="${tot<0?'neg':tot>0?'pos':''}">${tot>0?'+':''}${peso(tot)}</b></div>${hist.slice(0,5).map(x=>`<div class="sm mute">${dlabel(x.date)} · <b class="${signed(x)<0?'neg':'pos'}">${signed(x)>0?'+':'−'}${peso(Math.abs(signed(x)))}</b></div>`).join('')}`:'<div class="sm mute" style="margin-top:8px">Wala pang naitalang bilang.</div>'}</div></details>`;
+}
+function simHTML(){
+  const s=ui.sim||{},t=todayStr(),sgn0=v=>(v<0?'−':'')+peso(Math.abs(v));
+  if(!s.sup||!(+s.amt>0))return '<div class="sm mute">Pumili ng supplier at maglagay ng halaga para makita ang magiging epekto.</div>';
+  const R=simBuy(S.settings,S.log,S.pay,S.hist,S.shist,S.transfers,t,s.sup,+s.amt,s.mode,s.terms);
+  if(!R.ok)return '<div class="sm mute">Kulang pa ang datos para sa tantya.</div>';
+  const b=R.before,a=R.after,B=[];
+  // 1) budget
+  if(R.overSup||R.overBudget){const w=[];
+    if(R.overSup)w.push('Lampas ito ng '+peso(R.amt-b.fund)+' sa pwede pang bilhin kay '+esc(R.sup)+' ('+peso(b.fund)+').');
+    if(R.overBudget)w.push('Lampas sa natirang budget ng buwan ('+peso(Math.max(0,b.R))+').');
+    B.push(['warn','⚠️ Budget: '+w.join(' ')]);
+  }else B.push(['ok','✓ Okay ang budget. Kasya ang '+peso(R.amt)+' sa natirang budget ('+peso(b.R)+')'+(b.reserve>0?' at sa pwede pang bilhin kay '+esc(R.sup)+' ('+peso(b.fund)+')':'')+'.'+(b.surplus<0?'<div class="sm" style="font-weight:500;margin-top:4px">Pero kulang na ang budget ng buwan para sa lahat ng inaasahang bili, kaya mababawasan ang pwede sa ibang supplier.</div>':'')]);
+  // 2) pera
+  if(!a.low)B.push(['ok','✓ Okay ang pera. Hindi bababa sa buffer ang pera mo sa susunod na 14 araw (pinakamababa: '+sgn0(a.min)+').']);
+  else if(!b.low)B.push(['warn','⚠️ Pera: bababa ang pera mo sa '+sgn0(a.min)+' sa '+dlabel(a.minDate)+(R.buf?', mas mababa sa buffer mong '+peso(R.buf)+'':'')+'.']);
+  else if(a.min<b.min-0.5)B.push(['warn','⚠️ Pera: masikip na ang pera mo kahit wala ang bili na ito (pinakamababa '+sgn0(b.min)+' sa '+dlabel(b.minDate)+'). Dadagdagan ng bili na ito ang kulang ng '+peso(b.min-a.min)+'.']);
+  else B.push(['warn','⚠️ Pera: masikip na ang pera mo kahit wala ang bili na ito (pinakamababa '+sgn0(b.min)+' sa '+dlabel(b.minDate)+'). Hindi nito mababago ang pinakamababa.']);
+  const verdict=B.map(x=>`<div class="banner ${x[0]}" style="margin:8px 0">${x[1]}</div>`).join('');
+  const pct=(u,bd)=>bd>0?Math.min(100,Math.round(u/bd*100)):100,col=(R_,sh)=>R_<0?'#c0392b':sh<0?'#d9a441':'var(--pri)';
+  const bar=(l,x)=>`<div class="row" style="border:0;padding:6px 0 0"><span>${l}</span><b>${pct(x.used,x.budget)}%</b></div><div class="pb" style="margin:3px 0"><i style="width:${pct(x.used,x.budget)}%;background:${col(x.R,x.surplus)}"></i></div>`;
+  const ar=(l,x,y,f,upGood,note)=>{const worse=upGood?y<x-0.5:y>x+0.5,better=upGood?y>x+0.5:y<x-0.5;return `<div class="row sm" style="padding:7px 0"><span>${l}${note?'<div class="mute">'+note+'</div>':''}</span><span style="text-align:right">${f(x)} → <b class="${worse?'neg':better?'pos':''}">${f(y)}</b></span></div>`;};
+  const sgn=v=>(v<0?'−':'')+peso(Math.abs(v));
+  return `${verdict}${bar('Budget na nagamit, dati',b)}${bar('Pagkatapos ng bili',a)}
+${ar('Natirang budget',b.R,a.R,sgn,true)}
+${ar('Pwede pang bilhin kay '+esc(R.sup)+' (budget)',b.fund,a.fund,peso,true,b.reserve>0||a.reserve>0?'inaasahan pa: '+peso(b.reserve)+' → '+peso(a.reserve):'')}
+${ar('Pera ngayon',b.cash,a.cash,sgn,true,R.mode==='cash'?'':'Utang: hindi pa lumalabas ang pera, due '+dlabel(addDays(t,R.terms)))}
+${ar('Pinakamababang pera, 14 araw',b.min,a.min,sgn,true,a.min!==b.min||a.minDate!==b.minDate?'sa '+dlabel(b.minDate)+' → '+dlabel(a.minDate):'')}
+${ar('Pera na pwedeng ipambili, 7 araw',b.pool7,a.pool7,peso,true)}
+<div class="sm mute" style="margin-top:6px">Tantya lang ito, hindi nase-save at hindi gumagalaw ang totoong datos mo. Binibilang ito bilang bili ngayong araw (${R.mode==='cash'?'binayaran agad':'utang na due sa '+R.terms+' araw'}).</div>`;
+}
+function simCard(P){
+  const s=ui.sim||{},M=P.model,names=supKnown().sort((a,b)=>a.localeCompare(b));
+  const mode=s.mode||'credit',terms=s.terms!==undefined&&s.terms!==''?s.terms:M.terms;
+  return `<details class="grp" id="simBox"${s.sup&&+s.amt>0?' open':''}><summary>🧪 Subukan muna ang bili <span class="mute sm">(hindi sine-save)</span></summary><div style="padding:0 14px 12px">
+<div class="sm mute" style="margin-bottom:6px">Pumili ng supplier at halaga para makita kung ano ang mangyayari sa budget at pera mo, bago ka mag-order.</div>
+<label>Supplier</label><select id="simSup"><option value="">Pumili ng supplier...</option>${names.map(n=>`<option value="${esc(n)}"${s.sup&&supKey(n)===supKey(s.sup)?' selected':''}>${esc(n)}</option>`).join('')}</select>
+<label>Halaga ng order</label><input id="simAmt" type="number" inputmode="decimal" min="0" step="any" placeholder="hal. 15000" value="${esc(s.amt||'')}">
+<label>Paano babayaran</label><select id="simMode"><option value="credit"${mode==='credit'?' selected':''}>Utang (babayaran mamaya)</option><option value="cash"${mode==='cash'?' selected':''}>Cash (bayad agad)</option></select>
+<div id="simTermsBox"${mode==='cash'?' class="hid"':''}><label>Ilang araw bago ang due</label><input id="simTerms" type="number" inputmode="numeric" min="0" step="1" value="${esc(terms)}"></div>
+<div id="simOut" style="margin-top:8px">${simHTML()}</div></div></details>`;
 }
 function overMsg(supplier,amt){
   const P=window.__P;if(!P||!P.ok||!(amt>0))return'';
@@ -785,7 +838,7 @@ function renderHome(){
   const msel=`<select id="monthSel" aria-label="Pumili ng buwan">${[...ms].sort().reverse().map(k=>`<option value="${k}" ${k===ym?'selected':''}>${k===cur?'Ngayong buwan · ':''}${mlab(k)}</option>`).join('')}</select>`;
   const buf=+S.settings.buffer||0;
   let b='ok',msg='Okay ang pera mo sa susunod na 30 araw 👍';
-  if(f.firstNeg){b='bad';msg=`⚠️ Kukulangin ka sa <b>${dlabel(f.firstNeg.date)}</b> (${peso(Math.round(f.firstNeg.bal))}). Kailangan mo pa ng <b>${peso(Math.ceil(buf-f.min))}</b> para safe.${f.lowData?' <span class="mute">(Bayarin lang ang binilang, wala pang kita.)</span>':''}`;}
+  if(f.firstNeg){b='bad';msg=`⚠️ Kukulangin ka sa <b>${dlabel(f.firstNeg.date)}</b> (${peso(Math.round(f.firstNeg.bal))}).${f.minDate!==f.firstNeg.date?' Pinakamababa ang pera mo sa <b>'+dlabel(f.minDate)+'</b> ('+peso(Math.round(f.min))+')'+(fopt&&fopt.creditRate>0&&diffDays(t,f.minDate)>fopt.terms?', kasama ang tantya sa mga bili sa utang na hindi pa nalolog':'')+'.':''} Kailangan mo pa ng <b>${peso(Math.ceil(buf-f.min))}</b> para safe.${f.lowData?' <span class="mute">(Bayarin lang ang binilang, wala pang kita.)</span>':''}`;}
   else if(f.min<buf){b='warn';msg=`Manipis ang pera sa <b>${dlabel(f.minDate)}</b> (${peso(f.min)}), mas mababa sa buffer mo na ${peso(buf)}.`;}
   const recent=S.log.some(l=>l.date>=addDays(t,-14));
   const notes=[];
@@ -1096,6 +1149,15 @@ document.addEventListener('click',async ev=>{
 });
 
 function billType(f){const sup=f.elements.type&&f.elements.type.value==='Supplier';[['name',!sup],['supname',sup]].forEach(([n,on])=>{const el=f.elements[n];if(el){el.disabled=!on;el.classList.toggle('hid',!on);}});}
+function simUpdate(e){
+  const g=id=>document.getElementById(id);ui.sim=ui.sim||{};
+  if(e.id==='simSup')ui.sim.sup=e.value;
+  else if(e.id==='simAmt')ui.sim.amt=e.value;
+  else if(e.id==='simMode'){ui.sim.mode=e.value;const tb=g('simTermsBox');if(tb)tb.classList.toggle('hid',e.value==='cash');}
+  else if(e.id==='simTerms')ui.sim.terms=e.value;
+  const o=g('simOut');if(o){try{o.innerHTML=simHTML();}catch(err){console.error(err);o.innerHTML='<div class="sm mute">May problema sa tantya.</div>';}}
+}
+['input','change'].forEach(n=>document.addEventListener(n,ev=>{const e=ev.target;if(e&&/^sim(Sup|Amt|Mode|Terms)$/.test(e.id||''))simUpdate(e);}));
 document.addEventListener('input',ev=>{const e=ev.target;if(e&&e.id==='cashCount'){
   const dv=document.getElementById('cashDiff'),fx=document.getElementById('cashFix');if(!dv)return;
   if(e.value===''){dv.textContent='';if(fx)fx.classList.add('hid');return;}
