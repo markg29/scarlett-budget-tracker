@@ -107,8 +107,8 @@ input,select,textarea{min-width:0}
   main{max-width:1000px;padding-top:20px}
   header{padding-left:max(20px,calc((100% - 1000px)/2 + 20px));padding-right:max(20px,calc((100% - 1000px)/2 + 20px))}
   .two,.two.ord{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);column-gap:18px;align-items:start}.two.ord>.colL,.two.ord>.colR{display:block}
-  #app[data-tab=log]{max-width:640px;margin-left:auto;margin-right:auto}
-  #app[data-tab=set]{column-count:2;column-gap:18px}#app[data-tab=set]>*{break-inside:avoid}
+  #app[data-view=log]{max-width:640px;margin-left:auto;margin-right:auto}
+  #app[data-view=set]{column-count:2;column-gap:18px}#app[data-view=set]>*{break-inside:avoid}
   nav{max-width:520px}
   .hello h2{font-size:32px}
   #toast{max-width:480px}
@@ -163,7 +163,7 @@ main,.card,.bubble{overflow-wrap:anywhere;word-break:break-word}.item>div,.ent>d
 // ====== ISANG BESES LANG: i-paste dito ang Apps Script URL (nagtatapos sa /exec) ======
 const API_URL='https://script.google.com/macros/s/AKfycbyqsMv_r7FbAmSJWvGhMFmHh177hiO2KS6onWPpFovH_HbmoizYhLB2bfHjetTDthIJfA/exec';
 const API_PIN='';
-const NEED_VER=17;const BUILD='nov13-v19';   // pinakabagong bersyon ng Code.gs na kailangan ng app na ito
+const NEED_VER=17;const BUILD='nov13-v19b';   // pinakabagong bersyon ng Code.gs na kailangan ng app na ito
 const USER_NAME='Mark';   // pangalan na babatiin ni Kapi   // kung may PIN sa Code.gs, ilagay din dito
 // =======================================================================================
 //#LOGIC-START
@@ -988,7 +988,7 @@ function render(){
   const y=window.scrollY;
   const warn=srvVer!==null&&srvVer<NEED_VER?`<div class="banner warn">⚠️ Luma pa ang Code.gs mo (v${srvVer}, kailangan v${NEED_VER}). Gagana ang karamihan, pero may mga bagong feature na hindi pa gagana. I-paste ang bagong Code.gs sa Apps Script, tapos <b>Deploy → Manage deployments → Edit → New version → Deploy</b>.</div>`:'';
   const ew=ui.emptyWarn?'<div class="banner warn">⚠️ Walang laman ang Google Sheet na nakakonekta, pero may data sa phone mo. Hindi ko binura ang kopya. Tingnan kung tamang Sheet at Apps Script deployment ang gamit (Settings → URL). <button class="ghost sm" data-act="acceptempty">Tanggapin na walang laman</button></div>':'';
-  $('#app').dataset.tab=ui.tab;
+  $('#app').dataset.view=ui.tab;
   try{$('#app').innerHTML=ew+warn+(ui.tab==='home'?renderHome():ui.tab==='log'?renderLog():ui.tab==='bills'?renderBills():renderSet());}
   catch(e){console.error(e);$('#app').innerHTML='<div class="card"><h3>May problema sa pagpapakita</h3><div class="sm mute">Hindi nawala ang data mo sa Google Sheet. Pindutin ang button para i-clear ang naka-save na kopya sa phone at mag-load ulit.</div><button class="full" style="margin-top:10px" data-act="resetcache">I-reset at mag-load ulit</button><div class="sm mute" style="margin-top:8px">'+esc(String(e&&e.message||e))+'</div></div>';}
   window.scrollTo(0,y);
