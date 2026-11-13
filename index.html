@@ -163,7 +163,7 @@ main,.card,.bubble{overflow-wrap:anywhere;word-break:break-word}.item>div,.ent>d
 // ====== ISANG BESES LANG: i-paste dito ang Apps Script URL (nagtatapos sa /exec) ======
 const API_URL='https://script.google.com/macros/s/AKfycbyqsMv_r7FbAmSJWvGhMFmHh177hiO2KS6onWPpFovH_HbmoizYhLB2bfHjetTDthIJfA/exec';
 const API_PIN='';
-const NEED_VER=17;const BUILD='nov13-v23';   // pinakabagong bersyon ng Code.gs na kailangan ng app na ito
+const NEED_VER=17;const BUILD='nov13-v24';   // pinakabagong bersyon ng Code.gs na kailangan ng app na ito
 const USER_NAME='Mark';   // pangalan na babatiin ni Kapi   // kung may PIN sa Code.gs, ilagay din dito
 // =======================================================================================
 //#LOGIC-START
@@ -326,7 +326,11 @@ function supVisits(log,pay,hist,today){
     const idle=late>Math.max(30,3*every); // matagal nang hindi bumibisita: huwag isama sa reserba
     let left=0,d=eff;while(!idle&&d<=mEnd&&left<40){left++;d=addDays(d,every);}
     let left7=0;d=eff;const e7=addDays(today,7);while(!idle&&d<=e7&&left7<40){left7++;d=addDays(d,every);}
-    out[k]={every,last,next:eff,late,idle,left,left7,n:ds.length,avg:Math.round(ds.reduce((t,d)=>t+D[k][d],0)/ds.length)};
+    // karaniwang laki ng bili: kalahating average + kalahating median (mas hindi nadadala ng iisang napakalaking bili, pero hindi rin pinapabayaan ang malalaki)
+    const am=ds.map(d=>D[k][d]),sa=am.slice().sort((a,b)=>a-b),mdn=sa.length%2?sa[(sa.length-1)/2]:(sa[sa.length/2-1]+sa[sa.length/2])/2,mean=am.reduce((t,x)=>t+x,0)/am.length;
+    // gaano katiyak ang tantya (base sa backtest ng kasaysayan): madalas at maraming datos = mataas; madalang o kaunti ang datos = mababa
+    const rel=(every>=15||ds.length<8)?'low':(every<=7&&ds.length>=12)?'high':'mid';
+    out[k]={every,last,next:eff,late,idle,left,left7,n:ds.length,rel,avg:Math.round(0.5*mean+0.5*mdn)};
   });
   return out;
 }
@@ -570,6 +574,7 @@ function mbRows(){
     const chip=x.short7>0?'<span class="chip bad">⚠ kulang pera ngayon</span>':x.short>0?'<span class="chip am">⚠ kulang budget</span>':x.reserve>0?'<span class="chip ok">✓</span>':'';
     const body=(v&&v.idle?`<div class="sm mute">Matagal nang hindi bumibisita (huli: ${dlabel(v.last)}). Hindi muna isinama sa reserba.</div>`:v?`<div class="sm mute">${visTxt(v)}</div>`:'<div class="sm mute">Kulang pa ang kasaysayan para tantyahin ang bisita.</div>')
       +(x.reserve>0?`<div class="sm">Reserba: ${v.left} pang bisita × ~${peso(v.avg)} = <b>${peso(x.reserve)}</b></div>`:'')
+      +(v&&!v.idle&&x.reserve>0?`<div class="sm mute">Gaano katiyak ang tantya: <b>${v.rel==='high'?'Mataas':v.rel==='mid'?'Katamtaman':'Mababa'}</b> ${v.rel==='high'?'(madalas at regular ang bili niya)':v.rel==='mid'?'(pwedeng lumayo ng mga kalahati)':'(madalang o kaunti pa ang kasaysayan niya, pwedeng lumayo nang malaki)'}</div>`:'')
       +(x.due>0?`<div class="sm mute">May bayarin na ${peso(x.due)} (14 araw)</div>`:'')
       +(x.short7>0?`<div class="sm neg">Kulang ng ${peso(x.short7)} ang pera para sa mga bisita niya sa susunod na 7 araw (kasama ang papasok na benta)</div>`:'')
       +(x.short>0?`<div class="sm" style="color:#a8741a">Kulang ng ${peso(x.short)} sa budget para sa reserba niya (${Math.round((P.ratio||0)*100)}% lang ng inaasahan ang kasya)</div>`:'');
