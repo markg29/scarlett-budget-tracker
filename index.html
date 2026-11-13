@@ -163,7 +163,7 @@ main,.card,.bubble{overflow-wrap:anywhere;word-break:break-word}.item>div,.ent>d
 // ====== ISANG BESES LANG: i-paste dito ang Apps Script URL (nagtatapos sa /exec) ======
 const API_URL='https://script.google.com/macros/s/AKfycbyqsMv_r7FbAmSJWvGhMFmHh177hiO2KS6onWPpFovH_HbmoizYhLB2bfHjetTDthIJfA/exec';
 const API_PIN='';
-const NEED_VER=17;const BUILD='nov13-v24';   // pinakabagong bersyon ng Code.gs na kailangan ng app na ito
+const NEED_VER=20;const BUILD='nov13-v27';   // pinakabagong bersyon ng Code.gs na kailangan ng app na ito
 const USER_NAME='Mark';   // pangalan na babatiin ni Kapi   // kung may PIN sa Code.gs, ilagay din dito
 // =======================================================================================
 //#LOGIC-START
@@ -298,10 +298,17 @@ function monthSummary(st,log,pay,ym){
   const by=t=>sum(paid.filter(p=>p.type===t),p=>p.amount);
   const sales=sum(L,l=>+l.sales||0),fee=sum(L,gKita),stock=sum(L,l=>l.stock),opex=sum(L,l=>l.opex);
   const sup=by('Supplier'),staff=by('Staff'),store=by('Store'),pers=by('Personal');
+  // hulog sa utang ng store: ang principal ay hindi gastos, ang interes lang (galing sa Settings) ang binibilang sa tubo
+  const loanPaid=sum(paid.filter(p=>p.loan&&p.type==='Store'),p=>+p.amount||0),loanInt=loanPaid>0?(+st.loan_interest||0):0,exp=opex+staff+(store-loanPaid)+loanInt;
   const storeOut=stock+opex+sup+staff+store,storeNet=sales+fee-storeOut;
   const feeIn=sum(L,l=>l.fee),feeOut=sum(L,l=>l.cofee),loadP=sum(L,l=>(+l.loadsale||0)-(+l.loadcost||0));
-  return{sales,fee,feeIn,feeOut,loadP,stock,opex,sup,staff,store,pers,storeOut,storeNet,totalNet:storeNet-pers,
-    estProfit:sales*((+st.margin_pct||0)/100)+fee-opex-staff-store};
+  return{sales,fee,feeIn,feeOut,loadP,stock,opex,sup,staff,store,pers,storeOut,storeNet,totalNet:storeNet-pers,loanPaid,loanInt,exp,
+    estProfit:sales*((+st.margin_pct||0)/100)+fee-exp};
+}
+// binili ngayong buwan (stock na nalog + bili sa supplier, kasama ang utang ayon sa petsa ng resibo)
+function monthBuy(log,pay,hist,ym,today){
+  const from=ym+'-01',last=ym+'-'+String(new Date(Date.UTC(+ym.slice(0,4),+ym.slice(5,7),0)).getUTCDate()).padStart(2,'0'),to=ym===today.slice(0,7)?today:last;
+  const sp=supSpend(log,pay,hist,to,from);return r2(Object.keys(sp).reduce((t,k)=>t+sp[k].amt,0));
 }
 
 
@@ -531,8 +538,8 @@ function parseChat(text,today,known){
 const CORE=[['Cash','Cash','cash'],['GCash','GCash','gcash'],['Drawer','Pera ng GCash','drawer'],['Huling','Huling Benta','huling'],['Utang','Utang ng iba','utang'],['Personal','Personal','personal'],['Barya','Barya','barya']];
 function walletList(all){
   const ov={};(S.wallets||[]).forEach(w=>{ov[w.id]=w;});
-  const L=CORE.map(c=>{const o=ov[c[0]]||{};return{id:c[0],name:o.name||c[1],key:c[2],custom:false,active:String(o.active)!=='0',inTotal:c[0]!=='Utang',opening:0};});
-  (S.wallets||[]).filter(w=>String(w.id).indexOf('w_')===0).forEach(w=>L.push({id:w.id,name:w.name,key:w.id,custom:true,active:String(w.active)!=='0',inTotal:String(w.inTotal)!=='0',opening:+w.opening||0}));
+  const L=CORE.map(c=>{const o=ov[c[0]]||{};return{id:c[0],name:o.name||c[1],key:c[2],custom:false,del:String(o.active)==='x',active:String(o.active)!=='0'&&String(o.active)!=='x',inTotal:c[0]!=='Utang',opening:0};});
+  (S.wallets||[]).filter(w=>String(w.id).indexOf('w_')===0).forEach(w=>L.push({id:w.id,name:w.name,key:w.id,custom:true,del:String(w.active)==='x',active:String(w.active)!=='0'&&String(w.active)!=='x',inTotal:String(w.inTotal)!=='0',opening:+w.opening||0}));
   return all?L:L.filter(w=>w.active);
 }
 function wname(id){if(id==='Adjust')return'Ayos';const w=walletList(true).find(x=>x.id===id);return w?w.name:(id||'');}
@@ -556,12 +563,12 @@ function tiles(){
   return `<div class="grid2" style="margin:12px 0">${L.filter(w=>w.id!=='Utang').concat(L.filter(w=>w.id==='Utang')).map(one).join('')}</div>`;
 }
 function walletMgr(){
-  const W=calcWallets(S.settings,S.log,S.pay,S.transfers),L=walletList(true),e=ui.walEdit;
-  const rows=L.map(w=>{const id=esc(w.id);return `<div class="item"><div class="sm"><b>${esc(w.name)}</b>${w.active?'':' <span class="mute">(nakatago)</span>'}<div class="mute">${peso(wbal(W,w))}${w.custom&&!w.inTotal?' · hindi kasama sa kabuuan':''}</div></div><div class="acts"><button class="ghost sm" data-act="waledit" data-id="${id}">✏️</button>${w.id==='Cash'||w.id==='GCash'?'':w.active?`<button class="ghost sm" data-act="walhide" data-id="${id}">Itago</button>`:`<button class="ghost sm" data-act="walshow" data-id="${id}">Ibalik</button>`}${w.custom?`<button class="danger sm" data-act="waldel" data-id="${id}">✕</button>`:''}</div></div>`;}).join('');
+  const W=calcWallets(S.settings,S.log,S.pay,S.transfers),AL=walletList(true),nDel=AL.filter(w=>w.del).length,L=AL.filter(w=>!w.del||ui.walDel),e=ui.walEdit;
+  const rows=L.map(w=>{const id=esc(w.id);return `<div class="item"><div class="sm"><b>${esc(w.name)}</b>${w.del?' <span class="mute">(nabura)</span>':w.active?'':' <span class="mute">(nakatago)</span>'}<div class="mute">${peso(wbal(W,w))}${w.custom&&!w.inTotal?' · hindi kasama sa kabuuan':''}</div></div><div class="acts"><button class="ghost sm" data-act="waledit" data-id="${id}">✏️</button>${w.id==='Cash'||w.id==='GCash'?'':w.del?`<button class="ghost sm" data-act="walshow" data-id="${id}">Ibalik</button>`:`${w.active?`<button class="ghost sm" data-act="walhide" data-id="${id}">Itago</button>`:`<button class="ghost sm" data-act="walshow" data-id="${id}">Ibalik</button>`}<button class="danger sm" data-act="waldel" data-id="${id}">Burahin</button>`}</div></div>`;}).join('');
   let form='';
   if(e){const w=e==='new'?null:L.find(x=>x.id===e),core=w&&!w.custom;
     form=`<form id="fWal"><input type="hidden" name="wid" value="${w?esc(w.id):''}"><label>Pangalan ng wallet</label><input name="name" required maxlength="40" value="${w?esc(w.name):''}" placeholder="hal. Maya, Bangko">${core?'<div class="sm mute">Ang panimulang halaga ng wallet na ito ay nasa itaas (✏️ Baguhin).</div>':`<label>Panimulang halaga</label><input type="number" name="opening" inputmode="decimal" step="any" min="0" value="${w?esc(w.opening):0}"><label class="chk"><input type="checkbox" name="intotal" ${!w||w.inTotal?'checked':''}> Kasama sa Kabuuang pera</label>`}<div class="grid2"><button class="full">Save</button><button type="button" class="ghost full" data-act="walcancel">Kansel</button></div></form>`;}
-  return `<div class="card"><h3>Mga wallet</h3>${rows}${form||'<button class="full" data-act="waledit" data-id="new">+ Dagdag na wallet</button>'}<div class="sm mute" style="margin-top:8px">Pwedeng itago ang wallet kapag zero na ang laman. Ang wallet na may lipat o bayad na ay itatago na lang, hindi mabubura.</div></div>`;
+  return `<div class="card"><h3>Mga wallet</h3>${rows}${form||'<button class="full" data-act="waledit" data-id="new">+ Dagdag na wallet</button>'}${nDel?`<button class="ghost sm full" data-act="walshowdel" style="margin-top:8px">${ui.walDel?'Itago ang nabura':'Ipakita ang nabura ('+nDel+')'}</button>`:''}<div class="sm mute" style="margin-top:8px">Pwedeng burahin ang wallet kapag zero na ang laman. Hindi nabubura ang mga dating record, lipat, at bayad — hindi na lang lalabas ang wallet sa listahan, at maibabalik mo ito anumang oras. Hindi pwedeng burahin ang Cash at GCash.</div></div>`;
 }
 function mbRows(){
   const P=window.__P;if(!P||!P.ok)return'';
@@ -892,6 +899,7 @@ ${ui.bd?`<div class="bdbox"><b>Paano nabuo ang ${esc(bdW().name)}</b>${breakdown
 <div class="card"><h3>Susunod na bayarin</h3>${up}</div>
 <div class="card"><h3>${ym===cur?'Ngayong buwan':mlab(ym)}</h3>${msel}
 <div class="row"><span>Benta</span><b>${peso(m.sales)}</b></div>
+${(()=>{const ds=new Set(S.log.filter(l=>String(l.date).slice(0,7)===ym&&(+l.sales||0)>0).map(l=>l.date));return ds.size?`<div class="row sub2"><span class="mute">Average benta kada araw <span class="sm">(${ds.size} araw na may benta)</span></span><span>${peso(Math.round(m.sales/ds.size))}</span></div>`:'';})()}
 <div class="row"><span>Kita sa GCash</span><b>${peso(m.fee)}</b></div>
 <div class="row sub2"><span class="mute">Cash-in fee</span><span>${peso(m.feeIn)}</span></div>
 <div class="row sub2"><span class="mute">Cash-out fee</span><span>${peso(m.feeOut)}</span></div>
@@ -906,6 +914,12 @@ ${ui.bd?`<div class="bdbox"><b>Paano nabuo ang ${esc(bdW().name)}</b>${breakdown
 <div class="row"><span class="mute">Labas ng pera sa store (stock + gastos)</span><span>${peso(m.storeOut)}</span></div>
 <div class="row"><span>Net ng store <span class="mute sm">(pera, hindi tubo)</span></span><b class="${cls(m.storeNet)}">${peso(m.storeNet)}</b></div>
 <div class="row"><span>Tantyang tubo (${+S.settings.margin_pct||0}% margin)</span><b class="${cls(m.estProfit)}">${peso(m.estProfit)}</b></div>
+${(()=>{const buy=monthBuy(S.log,S.pay,S.hist,ym,t),real=r2(m.sales+m.fee-buy-m.exp),mg=m.sales>0?Math.round((m.sales-buy)/m.sales*1000)/10:null;
+return `<div class="row"><span class="mute">Binili ngayong buwan <span class="sm">(stock, kasama ang utang)</span></span><span>${peso(buy)}</span></div>
+${m.loanPaid>0?`<div class="row sub2"><span class="mute">Hulog sa utang ${peso(m.loanPaid)} · gastos lang ang interes</span><span>${m.loanInt>0?peso(m.loanInt):'<span class="neg">₱0, ilagay sa Settings</span>'}</span></div>`:''}
+<div class="row"><span><b>Tantyang totoong tubo</b> <span class="mute sm">(benta + GCash − binili − gastos)</span></span><b class="${cls(real)}">${peso(real)}</b></div>
+${mg!==null?`<div class="sm mute">Tunay na margin ngayong buwan: <b>${mg}%</b> (benta bawas binili).</div>`:''}
+<div class="sm mute" style="margin-top:4px">${ym===cur?'Hindi pa tapos ang buwan: ang bili sa utang na hindi pa naka-encode ay wala pa rito, kaya maaaring mas mataas ito sa totoo. ':''}Hindi binibilang kung dumami o nabawasan ang stock sa shelf: kapag nag-stock up ka, lalabas na mababa ang tubo; kapag ubos stock, lalabas na mataas.</div>`;})()}
 ${verdict?`<div class="sm" style="margin-top:8px">${verdict}</div>`:''}</div></div><div>${cashCard()}${budgetCard}</div></div>`;
 }
 
@@ -1057,7 +1071,7 @@ function renderSet(){
 <label>Apps Script Web App URL</label><input name="url" value="${esc(cfg.url)}" placeholder="https://script.google.com/macros/s/.../exec">
 <label>PIN (kung nilagay mo sa Code.gs)</label><input name="pin" value="${esc(cfg.pin)}" type="password" autocomplete="off">
 <button class="full">I-save at i-test</button></form></div>`;
-  const F=[['opening_cash','Panimulang Cash','Cash na hawak mo nung nagsimula ka mag-log'],['opening_gcash','Panimulang GCash','Balance ng GCash wallet nung nagsimula ka'],['opening_drawer','Panimulang Pera ng GCash','Cash sa drawer ng cash-in at load'],['opening_huling','Panimulang Huling Benta','Perang iniwan mo sa store bilang huling benta'],['opening_utang','Panimulang Utang ng iba','Total na utang sa iyo nung nagsimula ka (hindi kasama sa Kabuuang pera)'],['opening_personal','Panimulang Personal','Pera na pang-sarili mo'],['opening_barya','Panimulang Barya','Coins ng store, hiwalay sa Pondo'],['margin_pct','Margin ng tubo (%)','Tantya ng tubo sa benta'],['buffer','Buffer','Pinakamababang pera na gusto mong laging may natitira']];
+  const F=[['opening_cash','Panimulang Cash','Cash na hawak mo nung nagsimula ka mag-log'],['opening_gcash','Panimulang GCash','Balance ng GCash wallet nung nagsimula ka'],['opening_drawer','Panimulang Pera ng GCash','Cash sa drawer ng cash-in at load'],['opening_huling','Panimulang Huling Benta','Perang iniwan mo sa store bilang huling benta'],['opening_utang','Panimulang Utang ng iba','Total na utang sa iyo nung nagsimula ka (hindi kasama sa Kabuuang pera)'],['opening_personal','Panimulang Personal','Pera na pang-sarili mo'],['opening_barya','Panimulang Barya','Coins ng store, hiwalay sa Pondo'],['margin_pct','Margin ng tubo (%)','Tantya ng tubo sa benta'],['buffer','Buffer','Pinakamababang pera na gusto mong laging may natitira'],['loan_interest','Interes ng utang kada buwan','Gastos lang ang interes, hindi ang buong hulog. Kasama ito sa tubo kapag may hulog na nabayaran sa buwan']];
   if(!ui.setEdit)return conn+`<div class="card"><h3>Pera</h3>${F.map(f=>`<div class="row"><span>${f[1]}<div class="sm mute">${f[2]}</div></span><b>${f[0]==='margin_pct'?(+s[f[0]]||0)+'%':peso(+s[f[0]]||0)}</b></div>`).join('')}
 <button class="ghost full" data-act="setedit">✏️ Baguhin</button></div>${marginCard()}${accCard()}${walletMgr()}${supMgr()}${histMgr()}${salesMgr()}${backupCard()}`;
   return conn+`<div class="sm mute" style="margin:0 4px 10px">Bersyon ng app: ${BUILD}</div><div class="card"><h3>Baguhin ang Settings</h3><div class="banner warn">Baguhin lang ito kung sigurado ka. Apektado ang lahat ng balance at forecast.</div><form id="fSet">
@@ -1104,7 +1118,8 @@ document.addEventListener('click',async ev=>{
   if(a==='walcancel'){ui.walEdit=null;return render();}
   if(a==='walhide'){const w=walletList(true).find(x=>x.id===id),b=w?wbal(calcWallets(S.settings,S.log,S.pay,S.transfers),w):0;if(!w)return;if(Math.abs(b)>=0.005){toast('⚠️ May laman pa ang '+w.name+' ('+peso(b)+'). Gawing zero muna bago itago.','err');return;}if(confirm('Itago ang "'+w.name+'"? Maibabalik mo ito anumang oras.'))await run({action:'setWalletActive',id,active:false},'Naitago');return;}
   if(a==='walshow'){await run({action:'setWalletActive',id,active:true},'Naibalik ✓');return;}
-  if(a==='waldel'){const w=walletList(true).find(x=>x.id===id);if(w&&confirm('Burahin ang wallet na "'+w.name+'"?'))await run({action:'delWallet',id},'Binura');return;}
+  if(a==='waldel'){const w=walletList(true).find(x=>x.id===id);if(!w)return;const b=wbal(calcWallets(S.settings,S.log,S.pay,S.transfers),w);if(Math.abs(b)>=0.005){toast('⚠️ May laman pa ang '+w.name+' ('+peso(b)+'). Ilipat muna sa ibang wallet para maging zero.','err');return;}if(confirm('Burahin ang "'+w.name+'"?\n\nHindi mabubura ang mga dating record, lipat, at bayad — hindi na lang ito lalabas sa listahan. Maibabalik mo ito anumang oras (Ipakita ang nabura).'))await run({action:'delWallet',id},'Nabura (ligtas ang mga record)');return;}
+  if(a==='walshowdel'){ui.walDel=!ui.walDel;return render();}
   if(a==='supedit'){const s=(S.suppliers||[]).find(x=>x.id===id);if(!s)return;const nm=prompt('Bagong pangalan ng supplier.\n(Mababago rin sa lahat ng dating entry at bayarin.)',s.name);if(nm&&nm.trim()&&nm.trim()!==s.name)await run({action:'saveSupplier',id,name:nm},'Na-update ✓');return;}
   if(a==='suphide'){await run({action:'setSupplierActive',id,active:false},'Naitago');return;}
   if(a==='supshow'){await run({action:'setSupplierActive',id,active:true},'Naibalik ✓');return;}
@@ -1285,7 +1300,7 @@ document.addEventListener('submit',async ev=>{
   }else if(f.id==='fPaid'){
     if(await run({action:'editPaid',id:d.pid,type:d.type,name:d.name,amount:d.amount,paidDate:d.paidDate,wallet:d.wallet,notes:d.notes},'Na-save ✓')){ui.paidEdit=null;render();}
   }else if(f.id==='fSet'){
-    const keys=['opening_cash','opening_gcash','opening_drawer','opening_huling','opening_utang','opening_personal','opening_barya','margin_pct','buffer'],lab={opening_cash:'Cash',opening_gcash:'GCash',opening_drawer:'Pera ng GCash',opening_huling:'Huling Benta',opening_utang:'Utang ng iba',opening_personal:'Personal',opening_barya:'Barya',margin_pct:'Margin %',buffer:'Buffer'};
+    const keys=['opening_cash','opening_gcash','opening_drawer','opening_huling','opening_utang','opening_personal','opening_barya','margin_pct','buffer','loan_interest'],lab={opening_cash:'Cash',opening_gcash:'GCash',opening_drawer:'Pera ng GCash',opening_huling:'Huling Benta',opening_utang:'Utang ng iba',opening_personal:'Personal',opening_barya:'Barya',margin_pct:'Margin %',buffer:'Buffer',loan_interest:'Interes ng utang kada buwan'};
     const ch=keys.filter(k=>(+d[k]||0)!==(+S.settings[k]||0));
     if(!ch.length){ui.setEdit=false;return render();}
     if(!confirm('I-save ang pagbabago?\n\n'+ch.map(k=>lab[k]+': '+(+S.settings[k]||0)+' → '+(+d[k]||0)).join('\n')))return;
