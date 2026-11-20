@@ -137,7 +137,7 @@ input,select,textarea{min-width:0}
 @keyframes bar{0%{width:0;margin-left:0}50%{width:60%;margin-left:20%}100%{width:0;margin-left:100%}}
 #toast.ok{background:var(--pri-d)}#toast.err{background:var(--bad)}
 #toast{position:fixed;left:14px;right:14px;bottom:98px;max-width:532px;margin:0 auto;background:var(--ink);color:#fff;padding:13px 16px;border-radius:18px;display:none;z-index:9;text-align:center;font:600 16px var(--disp);box-shadow:0 12px 28px -10px rgba(0,0,0,.4)}
-table{width:100%;border-collapse:collapse}th,td{padding:8px 4px;text-align:right;border-bottom:1px dashed var(--line)}th:first-child,td:first-child{text-align:left}th{font-size:12.5px;color:var(--mute);font-weight:700}tr:last-child td{border-bottom:0}
+table{width:100%;border-collapse:collapse}th,td{padding:8px 4px;text-align:right;border-bottom:1px dashed var(--line)}th:first-child,td:first-child{text-align:left}th{font-size:12.5px;color:var(--mute);font-weight:700}tr:last-child td{border-bottom:0}.fct td:not(:first-child){white-space:nowrap;font-size:14px}.fct td:first-child{width:27%}
 .it-r{display:flex;flex-direction:column;align-items:flex-end;gap:8px;flex:0 0 auto}.it-r b{font:600 17px var(--disp)}.more{padding:7px 12px;letter-spacing:.1em}
 .paybox{background:var(--soft);border-radius:14px;padding:10px 12px;margin-top:8px}.paybox .acts{margin-top:6px}
 .tile[data-act=bd]{cursor:pointer}.bdbox{background:var(--soft);border-radius:16px;padding:12px 14px;margin:0 0 12px}.bdbox>b{font:600 15px var(--disp);color:var(--fur-d)}.bdbox .row{padding:5px 0;font-size:14px}
@@ -165,7 +165,7 @@ main,.card,.bubble{overflow-wrap:anywhere;word-break:break-word}.item>div,.ent>d
 // ====== ISANG BESES LANG: i-paste dito ang Apps Script URL (nagtatapos sa /exec) ======
 const API_URL='https://script.google.com/macros/s/AKfycbyqsMv_r7FbAmSJWvGhMFmHh177hiO2KS6onWPpFovH_HbmoizYhLB2bfHjetTDthIJfA/exec';
 const API_PIN='';
-const NEED_VER=23;const BUILD='nov19-v44';   // pinakabagong bersyon ng Code.gs na kailangan ng app na ito
+const NEED_VER=25;const BUILD='nov20-v48';   // pinakabagong bersyon ng Code.gs na kailangan ng app na ito
 const USER_NAME='Mark';   // pangalan na babatiin ni Kapi   // kung may PIN sa Code.gs, ilagay din dito
 // =======================================================================================
 //#LOGIC-START
@@ -193,12 +193,16 @@ function sum(a,f){return r2(a.reduce((t,x)=>t+(+f(x)||0),0));}
 let CW=[];
 function setCW(a){CW=(Array.isArray(a)?a:[]).filter(w=>w&&String(w.id).indexOf('w_')===0);}
 function knownW(){return['GCash','Personal','Barya','Drawer','Huling'].concat(CW.map(w=>w.id));}
+// Pera pambili: aling wallet ang pwedeng ipambili ng stock. Bitmask na nasa Settings (pool_mask). Panimula: Cash, Huling Benta, Personal at Barya.
+// Hindi kasama sa panimula ang GCash at Pera ng GCash dahil pambayad iyon sa cash-out at cash-in ng mga customer.
+const POOLB={Cash:1,GCash:2,Drawer:4,Huling:8,Personal:16,Barya:32},POOL0=1+8+16+32;
+function poolMask(st){const v=st?st.pool_mask:undefined;if(v===undefined||v===null||v==='')return POOL0;const n=Math.floor(+v);return isFinite(n)&&n>=0&&n<64?n:POOL0;}
 function calcWallets(st,log,pay,tr){
   tr=tr||[];
   const paid=pay.filter(p=>p.status==='Paid');
   const pw=w=>sum(paid.filter(p=>(knownW().includes(p.wallet)?p.wallet:'Cash')===w),p=>p.amount);
   const tIn=w=>sum(tr.filter(x=>x.to===w),x=>x.amount),tOut=w=>sum(tr.filter(x=>x.from===w),x=>x.amount);
-  const cash=(+st.opening_cash||0)+sum(log,l=>l.sales)-sum(log,l=>l.gsales)-sum(log,l=>l.cashout)
+  const cash=(+st.opening_cash||0)+sum(log,l=>l.sales)+sum(log,l=>l.otherinc)-sum(log,l=>l.gsales)-sum(log,l=>l.cashout)
     -(sum(log,l=>l.stock)-sum(log,l=>l.gstock))-(sum(log,l=>l.opex)-sum(log,l=>l.gopex))-pw('Cash')+tIn('Cash')-tOut('Cash');
   const gcash=(+st.opening_gcash||0)+sum(log,l=>l.gsales)-sum(log,l=>l.cashin)+sum(log,l=>l.cashout)+sum(log,l=>l.cofee)-sum(log,l=>l.gstock)-sum(log,l=>l.gopex)-sum(log,l=>l.loadcost)-pw('GCash')+tIn('GCash')-tOut('GCash');
   const personal=(+st.opening_personal||0)+tIn('Personal')-tOut('Personal')-pw('Personal');
@@ -208,7 +212,8 @@ function calcWallets(st,log,pay,tr){
   const utang=(+st.opening_utang||0)+tIn('Utang')-tOut('Utang');
   const R={cash:r2(cash),gcash:r2(gcash),drawer:r2(drawer),huling:r2(huling),personal:r2(personal),barya:r2(barya)};
   const cust={};let ctot=0;CW.forEach(w=>{const b=r2((+w.opening||0)+tIn(w.id)-tOut(w.id)-pw(w.id));cust[w.id]=b;if(String(w.inTotal)!=='0')ctot+=b;});
-  return{cash:R.cash,gcash:R.gcash,drawer:R.drawer,huling:R.huling,personal:R.personal,barya:R.barya,utang:r2(utang),cust,total:r2(R.cash+R.gcash+R.drawer+R.huling+R.personal+R.barya+ctot)};
+  const total=r2(R.cash+R.gcash+R.drawer+R.huling+R.personal+R.barya+ctot),pm=poolMask(st),pool=r2((pm&POOLB.Cash?R.cash:0)+(pm&POOLB.GCash?R.gcash:0)+(pm&POOLB.Drawer?R.drawer:0)+(pm&POOLB.Huling?R.huling:0)+(pm&POOLB.Personal?R.personal:0)+(pm&POOLB.Barya?R.barya:0)+ctot);
+  return{cash:R.cash,gcash:R.gcash,drawer:R.drawer,huling:R.huling,personal:R.personal,barya:R.barya,utang:r2(utang),cust,total,pool,poolMask:pm,poolOut:r2(total-pool)};
 }
 function breakdown(st,log,pay,tr,which){
   tr=tr||[];
@@ -232,7 +237,7 @@ function breakdown(st,log,pay,tr,which){
     ['Cash-in (na-send ko)',-S_('cashin')],['Stock na binayad via GCash',-S_('gstock')],['Gastos na binayad via GCash',-S_('gopex')],['Load (ibinawas sa GCash)',-S_('loadcost')],
     ['Bayarin na binayad via GCash',-pw('GCash')],['Lipat papasok',tIn('GCash')],['Lipat palabas',-tOut('GCash')]
   ]:[
-    ['Panimulang Cash',+st.opening_cash||0],['Benta (POS)',S_('sales')],['Binayad via GCash (nasa GCash na)',-S_('gsales')],
+    ['Panimulang Cash',+st.opening_cash||0],['Benta (POS)',S_('sales')],['Ibang kita (labas ng store)',S_('otherinc')],['Binayad via GCash (nasa GCash na)',-S_('gsales')],
     ['Cash-out (inabot ko)',-S_('cashout')],['Stock (cash)',-(S_('stock')-S_('gstock'))],['Gastos ng store (cash)',-(S_('opex')-S_('gopex'))],
     ['Bayarin na binayad sa Cash',-pw('Cash')],['Lipat papasok',tIn('Cash')],['Lipat palabas',-tOut('Cash')]
   ];
@@ -240,7 +245,6 @@ function breakdown(st,log,pay,tr,which){
   L.push(['Ayos (dagdag/bawas)',adj]);
   return L.filter(x=>x[1]!==0||x[0].indexOf('Panimula')===0);
 }
-function calcCash(st,log,pay,tr){return calcWallets(st,log,pay,tr).total;}
 function gKita(l){return(+l.fee||0)+(+l.cofee||0)+(+l.loadsale||0)-(+l.loadcost||0);}
 function salesDays(log,today,N){
   const start=addDays(today,-(N-1));
@@ -250,7 +254,8 @@ function avgNet(log,today,N,pay){
   // kung wala pang benta na nalog ngayong araw, hanggang kahapon lang ang bilang (para hindi mabawasan ang average ng araw na hindi pa tapos)
   const end=log.some(l=>l.date===today&&(+l.sales||0)>0)?today:addDays(today,-1);
   const start=addDays(end,-(N-1));
-  const rec=log.filter(l=>l.date>=start&&l.date<=end);
+  const onlyInc=l=>(+l.otherinc||0)>0&&!['sales','stock','opex','cashin','cashout','fee','cofee','gsales','gstock','gopex','loadsale','loadcost'].some(k=>(+l[k]||0)>0); // Ibang kita lang: hindi galing sa store, kaya hindi bahagi ng average
+  const rec=log.filter(l=>l.date>=start&&l.date<=end&&!onlyInc(l));
   if(!rec.length||salesDays(log,end,N)<3)return 0; // kulang pa ang data: huwag mag-extrapolate
   const first=rec.reduce((m,l)=>l.date<m?l.date:m,rec[0].date);
   return (sum(rec,l=>(+l.sales||0)+gKita(l)-(+l.stock||0)-(+l.opex||0))-sum(cashBuys(pay,start,end),p=>+p.amount||0))/(diffDays(first,end)+1);
@@ -265,7 +270,7 @@ function stockStats(log,today){
 }
 function forecast(st,log,pay,today,H,tr,opt){
   H=H||30;
-  const w=calcWallets(st,log,pay,tr),cash0=w.total,daily=avgNet(log,today,14,pay),end=addDays(today,H),buffer=+st.buffer||0;
+  const w=calcWallets(st,log,pay,tr),cash0=w.pool,daily=avgNet(log,today,14,pay),end=addDays(today,H),buffer=+st.buffer||0;
   const events=[];
   pay.filter(p=>p.status!=='Paid').forEach(p=>{
     const mk=(due,rec)=>({day:Math.max(0,diffDays(today,due)),amount:rec?(+p.baseAmount||+p.amount):+p.amount,type:p.type,name:p.name,due,overdue:due<today});
@@ -291,22 +296,21 @@ function forecast(st,log,pay,today,H,tr,opt){
   const weekly=Math.max(0,Math.floor((isFinite(Wk)?Wk:0)/100)*100);
   const due={},proj={};
   [7,14,30].forEach(n=>{due[n]=sum(events.filter(e=>e.day<=n),e=>e.amount);proj[n]=series[Math.min(n,H)].bal;});
-  return{lowData:salesDays(log,today,14)<3,cash0,cash:w.cash,gcash:w.gcash,drawer:w.drawer,huling:w.huling,utang:w.utang,personal:w.personal,barya:w.barya,daily,weekly,series,min,minDay,minDate:addDays(today,minDay),firstNeg,due,proj,
+  return{lowData:salesDays(log,today,14)<3,cash0,total:w.total,poolOut:w.poolOut,cash:w.cash,gcash:w.gcash,drawer:w.drawer,huling:w.huling,utang:w.utang,personal:w.personal,barya:w.barya,daily,weekly,series,min,minDay,minDate:addDays(today,minDay),firstNeg,due,proj,
     safe:Math.max(0,Math.floor(min-buffer)),overdue:sum(events.filter(e=>e.overdue),e=>e.amount),events};
 }
 function monthSummary(st,log,pay,ym){
   const L=log.filter(l=>String(l.date).startsWith(ym));
   const paid=pay.filter(p=>p.status==='Paid'&&String(p.paidDate).startsWith(ym));
   const by=t=>sum(paid.filter(p=>p.type===t),p=>p.amount);
-  const sales=sum(L,l=>+l.sales||0),fee=sum(L,gKita),stock=sum(L,l=>l.stock),opex=sum(L,l=>l.opex);
+  const sales=sum(L,l=>+l.sales||0),fee=sum(L,gKita),other=sum(L,l=>+l.otherinc||0),stock=sum(L,l=>l.stock),opex=sum(L,l=>l.opex); // other = Ibang kita (labas ng store): tubo at pera lang, hindi benta
   const sup=by('Supplier'),staff=by('Staff'),store=by('Store'),pers=by('Personal');
   // hulog sa utang ng store: ang principal ay hindi gastos, ang interes lang (galing sa Settings) ang binibilang sa tubo
   const loanPaid=sum(paid.filter(p=>p.loan&&p.type==='Store'),p=>+p.amount||0),loanInt=loanPaid>0?(+st.loan_interest||0):0,exp=opex+staff+(store-loanPaid)+loanInt;
   const accrued=sum(pay.filter(p=>p.status!=='Paid'&&(p.type==='Staff'||p.type==='Store')&&!p.loan&&String(p.due).startsWith(ym)),p=>+p.amount||0); // due na ngayong buwan pero hindi pa nababayaran: gastos na rin ito
   const storeOut=stock+opex+sup+staff+store,storeNet=sales+fee-storeOut;
   const feeIn=sum(L,l=>l.fee),feeOut=sum(L,l=>l.cofee),loadP=sum(L,l=>(+l.loadsale||0)-(+l.loadcost||0));
-  return{sales,fee,feeIn,feeOut,loadP,stock,opex,sup,staff,store,pers,storeOut,storeNet,totalNet:storeNet-pers,loanPaid,loanInt,exp,accrued,
-    estProfit:sales*((+st.margin_pct||0)/100)+fee-exp-accrued};
+  return{sales,fee,other,feeIn,feeOut,loadP,stock,opex,sup,staff,store,pers,storeOut,storeNet,totalNet:storeNet-pers,loanPaid,loanInt,exp,accrued};
 }
 // binili ngayong buwan (stock na nalog + bili sa supplier, kasama ang utang ayon sa petsa ng resibo)
 function monthBuy(log,pay,hist,ym,today){
@@ -361,7 +365,7 @@ function buyHistory(log,pay,hist,today){
   const rows=[],undated=[];
   hist.filter(x=>String(x.date)<logCut&&(+x.amount||0)>0).forEach(x=>rows.push({src:'hist',id:'',date:String(x.date),name:String(x.supplier||'').trim(),amt:+x.amount||0,fut:String(x.date)>today}));
   log.filter(l=>(+l.stock||0)>0&&(!hMax||l.date>hMax||l.supplier)).forEach(l=>{
-    const other=['sales','opex','cashin','cashout','fee','cofee','gsales','loadsale','loadcost'].some(k=>(+l[k]||0)>0);
+    const other=['sales','opex','cashin','cashout','fee','cofee','gsales','loadsale','loadcost','otherinc'].some(k=>(+l[k]||0)>0);
     rows.push({src:'log',id:l.id,date:l.date,name:String(l.supplier||'').trim(),amt:+l.stock||0,gs:+l.gstock||0,notes:l.notes||'',other,fut:l.date>today});});
   pay.filter(p=>p.type==='Supplier').forEach(p=>{
     const d=buyDate(p);
@@ -413,51 +417,110 @@ function curMargin(log,pay,hist,shist,today,N){ // margin sa huling N araw (hang
 function reviewMonthly(log,pay,hist,shist,settings,today){ // pagsusuri: gaano katumpak ang mga estimate at anong setting ang dapat suriin (hindi nagbabago nang kusa)
   const daily=dailySales(log,shist),out={items:[],ok:false};
   const M=monthlyMargin(log,pay,hist,shist,today,3).filter(x=>x.days>=20&&x.pct!==null);
-  const acc=salesAccuracy(daily,today,8),stg=+settings.margin_pct||0;
+  const acc=salesAccuracy(daily,today,8);
   // 1) benta
   if(acc.length>=3){const mean=Math.round(acc.reduce((t,x)=>t+x.err,0)/acc.length*10)/10,below=acc.filter(x=>x.err<0).length;
     out.items.push({k:'sales',lvl:mean<=-8?'bad':mean<=-4||mean>=15?'warn':'ok',val:mean,n:acc.length,below});}
-  // 2) margin
-  if(M.length>=2){const avg=Math.round(M.reduce((t,x)=>t+x.pct,0)/M.length*10)/10,sug=Math.round(avg*2)/2,gap=Math.round((avg-stg)*10)/10;
-    out.items.push({k:'margin',lvl:gap<=-2?'bad':Math.abs(gap)>=1?'warn':'ok',val:avg,setting:stg,sug,gap,n:M.length});
-    // 3) budget sa pambili = bili / benta
+  // 2) budget sa pambili = bili / benta
+  if(M.length>=2){
     const ratio=Math.round(M.reduce((t,x)=>t+(1-x.pct/100),0)/M.length*1000)/10,used=(+settings.budget_pct>=50&&+settings.budget_pct<=100?+settings.budget_pct:85),g2=Math.round((ratio-used)*10)/10;
     out.items.push({k:'budget',lvl:g2>=5?'bad':Math.abs(g2)>=3?'warn':'ok',val:ratio,used,gap:g2,n:M.length});}
-  // 4) kumpleto ba ang log
+  // 3) kumpleto ba ang log
   const d28=Object.keys(daily).filter(d=>d>addDays(today,-28)&&d<=today).length,buys=Math.round(Object.keys(supSpend(log,pay,hist,today,addDays(today,-27))).length);
   out.items.push({k:'data',lvl:d28>=24?'ok':d28>=18?'warn':'bad',val:d28,sup:buys});
   out.ok=out.items.length>0;return out;
 }
 function profitView(st,log,pay,hist,shist,ym,today){ // Estimated actual profit ng isang buwan (benta × actual margin + GCash − gastos)
   const m=monthSummary(st,log,pay,ym),me=ym+'-'+String(new Date(Date.UTC(+ym.slice(0,4),+ym.slice(5,7),0)).getUTCDate()).padStart(2,'0'),endD=me<today?me:today,
-    c90=curMargin(log,pay,hist,shist,endD,90),c30=curMargin(log,pay,hist,shist,endD,30),stg=+st.margin_pct||0,
-    basis=c90.pct!==null?{p:c90.pct,l:'huling 90 araw'}:c30.pct!==null?{p:c30.pct,l:'huling 30 araw'}:{p:stg,l:'setting mo, kulang pa ang datos'},
-    buy=monthBuy(log,pay,hist,ym,today),real=r2(m.sales*basis.p/100+m.fee-m.exp-m.accrued),
+    c90=curMargin(log,pay,hist,shist,endD,90),c30=curMargin(log,pay,hist,shist,endD,30),
+    basis=c90.pct!==null?{p:c90.pct,l:'huling 90 araw'}:c30.pct!==null?{p:c30.pct,l:'huling 30 araw'}:null, // walang hulang margin: kung kulang ang datos ng bili, hindi tayo manghuhula ng tubo
+    buy=monthBuy(log,pay,hist,ym,today),real=basis?r2(m.sales*basis.p/100+m.fee+m.other-m.exp-m.accrued):null,
     ds=new Set(log.filter(l=>String(l.date).slice(0,7)===ym&&(+l.sales||0)>0).map(l=>l.date)).size,el=ym===today.slice(0,7)?+today.slice(8,10):+me.slice(8,10);
-  return{m,basis,buy,real,ds,el,sales:m.sales,fee:m.fee,exp:m.exp,gross:ds?Math.round(m.sales/ds*basis.p/100):null,net:el?Math.round(real/el):null,avgSales:ds?Math.round(m.sales/ds):null,mg:m.sales>0?Math.round((m.sales-buy)/m.sales*1000)/10:null};
+  return{m,basis,buy,real,ds,el,sales:m.sales,fee:m.fee,other:m.other,exp:m.exp,gross:basis&&ds?Math.round(m.sales/ds*basis.p/100):null,net:basis&&el?Math.round(real/el):null,avgSales:ds?Math.round(m.sales/ds):null,mg:m.sales>0?Math.round((m.sales-buy)/m.sales*1000)/10:null};
 }
 function persRate(pay,today){ // karaniwang personal na gastos kada araw na HINDI nakaiskedyul (mabilis na gastos, isang beses lang). Ang paulit-ulit na personal na bayarin ay nasa forecast na.
   const from=addDays(today,-27),amt=sum((pay||[]).filter(p=>p.type==='Personal'&&p.status==='Paid'&&(!p.repeat||p.repeat==='none')&&String(p.paidDate)>=from&&String(p.paidDate)<=today),p=>+p.amount||0);
   return Math.round(amt/28);
 }
-function cashCal(P,log,pay,today,cash,buf,days){
-  if(!P||!P.ok)return null;days=days||14;
+// Mga paulit-ulit na bayarin na wala pang nalikhang row sa loob ng panahon (parehong patakaran ng forecast), para makita ang susunod pang pagkakataon.
+function recBills(pay,today,end){
+  const out=[];
+  pay.filter(p=>p.status!=='Paid').forEach(p=>{
+    const anc=p.repeat==='monthly'?monthAnchor(pay,p):0;
+    let lleft=null;if(p.loan){const ps=sum(pay.filter(x=>x.loan===p.loan&&x.status==='Paid'),x=>+x.amount||0);lleft=r2((+p.total||0)-(+p.before||0)-ps-(+p.amount||0));}
+    let due=p.repeat&&p.repeat!=='none'?addRepeat(p.due,p.repeat,anc):null;
+    while(due&&due<=end){if(due>=today){let amt=+p.baseAmount||+p.amount;if(lleft!==null){if(lleft<=0)break;amt=Math.min(amt,lleft);lleft=r2(lleft-amt);}out.push({id:p.id,type:p.type,name:p.name,due,amt,rec:true});}due=addRepeat(due,p.repeat,anc);}
+  });
+  return out;
+}
+function cashCal(P,log,pay,today,cash,buf,days,opt){
+  if(!P||!P.ok)return null;days=days||14;const wr=!!(opt&&opt.rec);
   const M=P.model,inflow=M.inflow,cashRate=M.cashRate,creditRate=M.creditRate,terms=M.terms,opexRate=M.opexRate,pr=M.persRate||0;
-  const un=pay.filter(p=>p.status!=='Paid'&&String(p.due)<=addDays(today,days));
+  const un=pay.filter(p=>p.status!=='Paid'&&String(p.due)<=addDays(today,days)),rc=wr?recBills(pay,today,addDays(today,days)):[];
   let bal=cash,min=Infinity,minDate=today,lowDate=null;const rows=[];
   for(let i=0;i<=days;i++){
-    const d=addDays(today,i),bills=un.filter(p=>i===0?String(p.due)<=today:String(p.due)===d),out=sum(bills,p=>+p.amount||0);
+    const d=addDays(today,i),bills=un.filter(p=>i===0?String(p.due)<=today:String(p.due)===d),rb=wr?rc.filter(e=>i===0?String(e.due)<=today:String(e.due)===d):[],out=sum(bills,p=>+p.amount||0)+sum(rb,e=>e.amt);
     if(i===0)bal=r2(bal-out);else bal=r2(bal+inflow-cashRate-(i>terms?creditRate:0)-opexRate-pr-out);
     if(bal<min){min=bal;minDate=d;}
     if(lowDate===null&&bal<buf)lowDate=d;
-    rows.push({d,bal,bills:bills.map(p=>({name:p.name,amt:+p.amount||0})),out});
+    rows.push({d,bal,bills:wr?bills.map(p=>({name:p.name,amt:+p.amount||0,type:p.type,id:p.id})).concat(rb.map(e=>({name:e.name,amt:e.amt,type:e.type,id:e.id,rec:true}))):bills.map(p=>({name:p.name,amt:+p.amount||0})),out});
   }
   return{rows,min,minDate,lowDate,low:lowDate!==null,inflow,buyRate:cashRate+creditRate,cashRate,creditRate,terms,opexRate,persRate:pr,start:cash};
+}
+// Pinakasiksik na petsa sa kalendaryo ng pera at kung aling bayarin sa supplier ang pwedeng iurong. Tunay na pagkuwenta ulit ang ginagamit (hindi hula): ang balanse ay pagsasama-sama ng mga pasok at labas, kaya ang pag-urong ay pagbabago lang sa petsa ng labas.
+function crunch(CC,buf,shift){
+  if(!CC||!CC.rows||!CC.rows.length)return null;
+  buf=+buf||0;const SH=shift>0?Math.round(shift):7,R=CC.rows,n=R.length;
+  let mi=0;R.forEach((r,i)=>{if(r.bal<R[mi].bal)mi=i;});
+  const min=R[mi].bal,minDate=R[mi].d,gap=r2(buf-min);
+  const heavy=R.map((r,i)=>({d:r.d,i,out:r.out,bills:r.bills})).filter(x=>x.out>0).sort((a,b)=>b.out-a.out||a.i-b.i).slice(0,3);
+  const win=[];for(let i=0;i<=mi;i++)R[i].bills.forEach(b=>win.push(Object.assign({},b,{d:R[i].d,i})));
+  const flex=win.filter(b=>b.type==='Supplier'),fixed=win.filter(b=>b.type!=='Supplier');
+  let plan=null;
+  if(gap>0&&flex.length){
+    const minWith=mv=>{let m=Infinity,md=null;for(let i=0;i<n;i++){let b=R[i].bal;mv.forEach(x=>{if(i>=x.i)b+=x.amt;if(i>=x.i+SH)b-=x.amt;});b=r2(b);if(b<m){m=b;md=R[i].d;}}return{min:m,minDate:md};};
+    const cand=flex.slice().sort((a,b)=>b.amt-a.amt||a.i-b.i),mv=[];let after=null;
+    for(const c of cand){mv.push({name:c.name,amt:c.amt,from:c.d,i:c.i,to:addDays(c.d,SH)});after=minWith(mv);if(after.min>=buf)break;}
+    // alisin ang mga iniurong na wala namang naitutulong (hal. masyadong maaga ang due nila para umabot sa pinakasiksik na petsa)
+    for(let ch=true;ch;){ch=false;for(let k=mv.length-1;k>=0;k--){const w=mv.slice(0,k).concat(mv.slice(k+1)),mw=minWith(w);if(after.min>=buf?mw.min>=buf:mw.min>=after.min-1e-9){mv.splice(k,1);after=mw;ch=true;}}}
+    plan={moves:mv,after,enough:after.min>=buf,days:SH,left:r2(Math.max(0,buf-after.min))};
+  }
+  return{min,minDate,gap:Math.max(0,gap),low:gap>0,heavy,flex,fixed,plan,buf};
+}
+// Pwedeng idagdag na bili: ang pinakamababa sa budget ng buwan at sa pera (7 at 14 araw). Hindi bumababa sa 0, at buong daan-daan lang.
+function buyRoom(P,CC,buf){
+  if(!P||!P.ok)return null;
+  buf=+buf||0;
+  const b=Math.max(0,Math.round(P.surplus)),c7=Math.max(0,Math.round(P.cashSurplus)),c14=CC?Math.floor(Math.max(0,CC.min-buf)*0.8/100)*100:null,cash=c14===null?c7:Math.min(c7,c14),room=Math.floor(Math.min(b,cash)/100)*100;
+  return{room,budget:b,cash7:c7,cash14:c14,cash,by:cash<b?'cash':b<cash?'budget':'pareho'};
+}
+// Sobrang pera mula sa iisang kalendaryo ng pera (30 araw): pwedeng kunin para sa personal, ligtas na gastusin kada linggo, at pinakamababang pera sa 14 araw. Binawasan ng 20% ang lahat. Iisang pondo ito sa buyRoom: ang kinuha para sa personal ay bawas sa pwedeng idagdag na bili.
+function headroom(CC30,buf){
+  if(!CC30||!CC30.rows||CC30.rows.length<2)return null;
+  buf=+buf||0;const R=CC30.rows,fl=x=>Math.floor(Math.max(0,x)*0.8/100)*100;
+  let W=Infinity;for(let d=1;d<=Math.min(28,R.length-1);d++)W=Math.min(W,(R[d].bal-buf)/(d/7));
+  const m14=Math.min.apply(null,R.slice(0,15).map(r=>r.bal));
+  return{personal:fl(CC30.min-buf),weekly:fl(isFinite(W)?W:0),min14:m14};
+}
+// Bili vs Benta: bawat 7 araw (hanggang kahapon), magkano ang nabili kontra nabenta. Ang bili ay kasama ang utang (parehong patakaran ng budget).
+function buyVsSales(log,pay,hist,shist,today,buyPct,weeks){
+  weeks=weeks||4;const sd=dailySales(log||[],shist),bh=buyHistory(log,pay,hist,today).rows.filter(r=>!r.fut),bp=buyPct>0?buyPct:0.85,W=[];
+  for(let k=weeks;k>=1;k--){
+    const end=addDays(today,-1-7*(k-1)),start=addDays(end,-6);
+    let sales=0,days=0;for(let i=0;i<7;i++){const v=sd[addDays(start,i)];if(v>0){sales+=v;days++;}}
+    const buy=sum(bh.filter(r=>r.date>=start&&r.date<=end),r=>r.amt);
+    W.push({start,end,sales:r2(sales),days,buy:r2(buy),ok:days>=4,ratio:days>=4&&sales>0?buy/sales:null});
+  }
+  const agg=ws=>{const u=ws.filter(w=>w.ok),s=sum(u,w=>w.sales),b=sum(u,w=>w.buy);return{n:u.length,sales:r2(s),buy:r2(b),ratio:s>0?b/s:null};};
+  const a28=agg(W),a14=agg(W.slice(-2));
+  let status='kulang';
+  if(a28.n>=3&&a28.ratio!==null)status=(a28.ratio>1&&a14.n>=1&&a14.ratio>1)?'mataas':a28.ratio>bp+0.05?'medyo':'ok';
+  return{weeks:W,a28,a14,status,buyPct:bp,excess:status==='mataas'?r2(a28.buy-a28.sales):0};
 }
 // "Subukan muna": ginagaya ang isang bili nang hindi sine-save. Kinukuwenta ulit ang budget at pera na parang nabili na ito.
 function simBuy(st,log,pay,hist,shist,tr,today,sup,amt,mode,terms){
   amt=+amt||0;terms=Math.max(0,Math.round(+terms||0));
-  const buf=+st.buffer||0,run=pp=>{const cash=calcWallets(st,log,pp,tr).total,P=monthPlan(st,log,pp,hist,today,cash,shist);return{P,cash,CC:cashCal(P,log,pp,today,cash,buf,14)};};
+  const buf=+st.buffer||0,run=pp=>{const cash=calcWallets(st,log,pp,tr).pool,P=monthPlan(st,log,pp,hist,today,cash,shist);return{P,cash,CC:cashCal(P,log,pp,today,cash,buf,14,{rec:true})};};
   const A=run(pay);if(!A.P.ok||!(amt>0)||!supKey(sup))return{ok:false};
   const cashMode=mode==='cash';
   const row={id:'__sim',type:'Supplier',name:sup,amount:amt,due:cashMode?today:addDays(today,terms),repeat:'none',status:cashMode?'Paid':'Unpaid',paidDate:cashMode?today:'',wallet:cashMode?'Cash':'',notes:'sim',receipt:today};
@@ -528,31 +591,22 @@ function monthPlan(st,log,pay,hist,today,cash,shist){
   const cashPool=Math.max(0,r2(minB-buf));
   const needF=terms<=7?1:cashShare,need7=r2(sum(rows,x=>x.reserve7*needF)),ratio7=need7>0?Math.min(1,cashPool/need7):1;
   rows.forEach(x=>{x.fund7=Math.min(x.reserve7,Math.round(x.reserve7*ratio7));x.short7=x.reserve7-x.fund7;});
+  // budget bawat order: ang budget ng supplier hinati sa bilang ng inaasahang bisita niya hanggang katapusan ng buwan. Kung kulang ang pera sa susunod na 7 araw, ang mas maliit ang susundin.
+  rows.forEach(x=>{const v=x.visit,n=v&&!v.idle?v.left:0,m=v&&!v.idle?Math.min(v.left,v.left7):0,b=n>0?Math.floor(x.fund/n):0,c=(m>0&&x.short7>0)?Math.floor(x.fund7/m):Infinity,cash=c<b;
+    x.n=n;x.pvLimit=cash?'cash':'budget';x.pvBasis=cash?x.fund7:x.fund;x.pvDiv=cash?m:n;x.perVisit=n>0?Math.min(b,c):0;});
   const unnamed=sp['']?r2(sp[''].amt):0,totalReserve=totalR,reserve7=r2(sum(rows,x=>x.reserve7));
   return{ok:true,buyPct:BUY,futPct:FUTP,proj,soFar,avgDaily:Math.round(avgDaily),daysLeft,rhythm,lowWeek,future:Math.round(futureSales),budget,spentM,unnamed,dueSup,dueSupAll,dueAll,R,persM,persDue,persRate:pRate,cashPool,minB:r2(minB),totalReserve,surplus:r2(R-totalReserve),ratio,ratio7,reserve7,need7,cashSurplus:r2(cashPool-need7),model:{inflow,opexRate,persRate:pRate,buyRate,cashRate,creditRate,cashShare,terms},rows};
 }
-function stockBudget(st,log,pay,today,hist){
-  hist=Array.isArray(hist)?hist:[];
-  const hMax=hist.reduce((m,x)=>String(x.date)>m?String(x.date):m,''),logCut=log.filter(l=>(+l.stock||0)>0&&l.supplier).reduce((m,l)=>l.date<m?l.date:m,'9999-12-31');
-  const m=(+st.margin_pct||0)/100,s30=addDays(today,-29),s90=addDays(today,-89);
-  const rows=from=>{const by={};const add=(name,amt)=>{const k=supKey(name);const e=by[k]||(by[k]={name:'',amt:0});if(name&&!e.name)e.name=String(name).trim();e.amt+=amt;};
-    hist.filter(x=>String(x.date)<logCut&&String(x.date)>=from&&String(x.date)<=today).forEach(x=>add(x.supplier,+x.amount||0));
-    log.filter(l=>l.date>=from&&l.date<=today&&(+l.stock||0)>0&&(!hMax||l.date>hMax||l.supplier)).forEach(l=>add(l.supplier||'',+l.stock||0));
-    pay.filter(p=>p.status==='Paid'&&p.type==='Supplier'&&String(p.paidDate)>=from&&String(p.paidDate)<=today&&(!hMax||String(p.paidDate)>hMax)).forEach(p=>add(p.name,+p.amount||0));
-    return by;};
-  const b30=rows(s30),b90=rows(s90),V=o=>Object.keys(o).map(k=>o[k]);
-  const sales30=sum(log.filter(l=>l.date>=s30&&l.date<=today),l=>+l.sales||0),budget=Math.round(sales30*(1-m));
-  const spent=r2(sum(V(b30),e=>e.amt)),tot90=sum(V(b90),e=>e.amt);
-  const dueEnd=addDays(today,14),dueBy={};
-  pay.filter(p=>p.status!=='Paid'&&p.type==='Supplier'&&String(p.due)<=dueEnd).forEach(p=>{const k=supKey(p.name);const e=dueBy[k]||(dueBy[k]={name:String(p.name).trim(),amt:0,n:0});e.amt+=+p.amount||0;e.n++;});
-  const keys={};Object.keys(b30).concat(Object.keys(b90),Object.keys(dueBy)).forEach(k=>{keys[k]=1;});
-  const list=Object.keys(keys).map(k=>{const sh=tot90?(b90[k]?b90[k].amt:0)/tot90:0;return{key:k,name:(b30[k]&&b30[k].name)||(b90[k]&&b90[k].name)||'',spent:r2(b30[k]?b30[k].amt:0),share:sh,limit:Math.round(budget*sh),due:r2(dueBy[k]?dueBy[k].amt:0)};}).map(x=>Object.assign(x,{name:x.name||(dueBy[x.key]&&dueBy[x.key].name)||'',avail:r2(x.limit-x.spent-x.due)})).sort((a,b)=>b.share-a.share||b.spent-a.spent||b.due-a.due);
-  const due=r2(sum(Object.keys(dueBy).map(k=>dueBy[k]),e=>e.amt));
-  const others=pay.filter(p=>p.status!=='Paid'&&p.type!=='Supplier'&&String(p.due)<=dueEnd),dueOther=r2(sum(others,p=>+p.amount||0)),otherBy={};
-  others.forEach(p=>{otherBy[p.type]=r2((otherBy[p.type]||0)+(+p.amount||0));});
-  const d30=addDays(today,30),dueAll30=r2(sum(pay.filter(p=>p.status!=='Paid'&&String(p.due)<=d30),p=>+p.amount||0));
-  const vis=supVisits(log,pay,hist,today);list.forEach(x=>{x.visit=vis[x.key]||null;});
-  return{sales30,budget,spent,left:r2(budget-spent),due,dueOther,otherBy,dueAll:r2(due+dueOther),dueAll30,avail:r2(budget-spent-due),list};
+// Pagtimbang ng isang bili laban sa budget (walang salita rito, mga dahilan lang). Ginagamit ng babala sa Bili at Gastos.
+function buyCheck(P,supplier,amt){
+  amt=+amt;if(!P||!P.ok||!(amt>0))return[];
+  const k=supKey(supplier),x=(P.rows||[]).find(r=>r.key===k)||null,f=[];
+  if(x&&x.reserve>0&&amt>x.fund)f.push({t:'sup',name:x.name,over:amt-x.fund,fund:x.fund,n:x.n,pv:x.perVisit});
+  else if(x&&!(x.reserve>0)&&P.R<amt)f.push({t:'none',name:x.name});
+  else if(x&&x.reserve>0&&x.n>0&&amt>x.perVisit+(x.pvLimit==='cash'?0:Math.max(0,P.surplus))){ // sobra sa bahagi ng bisitang ito at wala nang sobrang budget na sasalo
+    const left=Math.max(0,x.pvBasis-amt);f.push({t:'visit',name:x.name,over:amt-x.perVisit,pv:x.perVisit,basis:x.pvBasis,div:x.pvDiv,cash:x.pvLimit==='cash',left,rest:x.pvDiv-1,next:x.pvDiv>1?Math.floor(left/(x.pvDiv-1)):0});}
+  if(amt>P.R)f.push({t:'month',R:Math.max(0,P.R)});
+  return f;
 }
 
 function chatNum(t){const n=parseFloat(String(t).replace(/,/g,''));return/k\s*$/i.test(String(t))?Math.round(n*1000*100)/100:n;}
@@ -632,6 +686,22 @@ function tiles(){
     return `<div class="tile ${CLS[w.id]||'x'}"${bd?` data-act="bd" data-v="${esc(w.key)}" role="button" tabindex="0"`:''}${w.id==='Utang'?' style="grid-column:1/-1"':''}><div class="sm mute"><i class="ic"></i>${esc(w.name)}${note}</div><b${w.id==='Utang'?'':` class="${cls(bal)}"`}>${peso(bal)}</b></div>`;};
   return `<div class="grid2" style="margin:12px 0">${L.filter(w=>w.id!=='Utang').concat(L.filter(w=>w.id==='Utang')).map(one).join('')}</div>`;
 }
+function poolList(){ // mga core wallet na pwedeng isama sa pera pambili
+  const W=calcWallets(S.settings,S.log,S.pay,S.transfers),m=poolMask(S.settings);
+  return walletList(true).filter(w=>POOLB[w.id]&&!w.del).map(w=>({id:w.id,name:w.name,bal:wbal(W,w),bit:POOLB[w.id],on:!!(m&POOLB[w.id]),hidden:!w.active}));
+}
+function poolNames(){const c=walletList(true).filter(w=>w.custom&&w.inTotal&&!w.del).map(w=>w.name);return poolList().filter(x=>x.on).map(x=>x.name).concat(c).join(', ')||'walang napili';}
+function poolOutNames(){return poolList().filter(x=>!x.on&&Math.abs(x.bal)>=0.005).map(x=>x.name+' '+pe(x.bal)).join(', ');}
+function poolMgr(){
+  const L=poolList(),W=calcWallets(S.settings,S.log,S.pay,S.transfers),old=srvVer!==null&&srvVer<24,custom=walletList(true).filter(w=>w.custom&&w.inTotal&&!w.del);
+  return `<div class="card" id="poolCard"><h3>Pera pambili</h3><div class="sm mute">Alin sa mga wallet mo ang pwedeng ipambili ng stock? Ito ang gagamitin ng budget at forecast. Kasama pa rin ang lahat sa Kabuuang pera sa Home.</div>
+<form id="fPool" style="margin-top:6px">${L.map(x=>`<label class="chk" style="padding:8px 0;border-top:1px dashed var(--line)"><input type="checkbox" name="pw" value="${x.bit}" ${x.on?'checked':''}><span style="flex:1">${esc(x.name)}${x.hidden?' <span class="mute sm">(nakatago)</span>':''}</span><b class="${cls(x.bal)}">${peso(x.bal)}</b></label>`).join('')}
+${custom.length?`<div class="sm mute" style="margin:6px 0">Kasama rin ang iba mong wallet na may tsek sa "Kasama sa Kabuuang pera": ${custom.map(w=>esc(w.name)).join(', ')}.</div>`:''}
+<div class="row"><span>Pera pambili ngayon</span><b>${peso(W.pool)}</b></div>
+${old?'<div class="banner warn" style="margin-top:8px">Kailangan muna ang bagong Code.gs (v24) para ma-save ito.</div>':''}
+<button class="full" style="margin-top:8px"${old?' disabled':''}>I-save</button></form>
+<div class="sm mute" style="margin-top:8px">Huwag isama ang GCash at Pera ng GCash kung pambayad mo ang mga iyon sa cash-out at cash-in ng mga customer. Hindi sila kasama sa simula.</div></div>`;
+}
 function walletMgr(){
   const W=calcWallets(S.settings,S.log,S.pay,S.transfers),AL=walletList(true),nDel=AL.filter(w=>w.del).length,L=AL.filter(w=>!w.del||ui.walDel),e=ui.walEdit;
   const rows=L.map(w=>{const id=esc(w.id);return `<div class="item"><div class="sm"><b>${esc(w.name)}</b>${w.del?' <span class="mute">(nabura)</span>':w.active?'':' <span class="mute">(nakatago)</span>'}<div class="mute">${peso(wbal(W,w))}${w.custom&&!w.inTotal?' · hindi kasama sa kabuuan':''}</div></div><div class="acts"><button class="ghost sm" data-act="waledit" data-id="${id}">✏️</button>${w.id==='Cash'||w.id==='GCash'?'':w.del?`<button class="ghost sm" data-act="walshow" data-id="${id}">Ibalik</button>`:`${w.active?`<button class="ghost sm" data-act="walhide" data-id="${id}">Itago</button>`:`<button class="ghost sm" data-act="walshow" data-id="${id}">Ibalik</button>`}<button class="danger sm" data-act="waldel" data-id="${id}">Burahin</button>`}</div></div>`;}).join('');
@@ -647,6 +717,7 @@ function mbRows(){
   return order.map((x,i)=>{
     const v=x.visit,vis=!q?(all||i<8):x.name.toLowerCase().includes(q);
     const pw=x.reserve>0?`<span class="pw ${x.fund<=0?'neg':x.short>0?'am2':''}">Pwede pang bilhin (budget): <b>${peso(x.fund)}</b>${x.short>0?' sa '+peso(x.reserve)+' na inaasahan':''}</span>${x.short7>0?`<span class="pw neg">Pera: ${peso(x.fund7)} lang ang kaya sa 7 araw, sa ${peso(x.reserve7)} na inaasahan</span>`:''}`:'<span class="pw">Wala nang inaasahang order ngayong buwan</span>';
+    const pv=x.reserve>0&&x.n>0?`<span class="pw ${x.perVisit<=0?'neg':''}">Budget bawat order: <b>${peso(x.perVisit)}</b> <span class="mute">(${peso(x.pvBasis)} ÷ ${x.pvDiv} pang bisita${x.pvLimit==='cash'?', limitado ng pera sa 7 araw':''})</span></span>`:'';
     const tot=x.spent+x.reserve,pc=tot>0?Math.min(100,Math.round(x.spent/tot*100)):0,col=x.short7>0?'#c0392b':x.short>0?'#d9a441':'var(--pri)';
     const chip=x.short7>0?'<span class="chip bad">⚠ kulang pera ngayon</span>':x.short>0?'<span class="chip am">⚠ kulang budget</span>':x.reserve>0?'<span class="chip ok">✓</span>':'';
     const body=(v&&v.idle?`<div class="sm mute">Matagal nang walang order (huli: ${dlabel(v.last)}). Hindi muna isinama sa inaasahang bili.</div>`:v?`<div class="sm mute">${visTxt(v)}</div>`:'<div class="sm mute">Kulang pa ang kasaysayan para estimatehin ang order.</div>')
@@ -655,25 +726,34 @@ function mbRows(){
       +(x.due>0?`<div class="sm mute">May bayarin na ${peso(x.due)} (14 araw)</div>`:'')
       +(x.short7>0?`<div class="sm neg">Kulang ng ${peso(x.short7)} ang pera para sa mga order niya sa susunod na 7 araw (kasama ang papasok na benta)</div>`:'')
       +(x.short>0?`<div class="sm" style="color:#a8741a">Kulang ng ${peso(x.short)} sa budget para sa inaasahang bili niya (${Math.round((P.ratio||0)*100)}% lang ng inaasahan ang kasya)</div>`:'');
-    return `<details class="supr2${vis?'':' hid'}" data-n="${esc(x.name.toLowerCase())}" data-i="${i}"><summary><span class="sn">${esc(x.name)}</span>${chip}<span class="sa">${peso(x.spent)}</span><span class="pb"><i style="width:${pc}%;background:${col}"></i></span>${pw}</summary><div class="bd">${body}</div></details>`;
+    return `<details class="supr2${vis?'':' hid'}" data-n="${esc(x.name.toLowerCase())}" data-i="${i}"><summary><span class="sn">${esc(x.name)}</span>${chip}<span class="sa">${peso(x.spent)}</span><span class="pb"><i style="width:${pc}%;background:${col}"></i></span>${pw}${pv}</summary><div class="bd">${body}</div></details>`;
   }).join('');
 }
 function mbCard(t){
-  const cash=calcWallets(S.settings,S.log,S.pay,S.transfers).total,P=monthPlan(S.settings,S.log,S.pay,S.hist,t,cash,S.shist);
+  const cash=calcWallets(S.settings,S.log,S.pay,S.transfers).pool,P=monthPlan(S.settings,S.log,S.pay,S.hist,t,cash,S.shist);
   window.__P=P;
   const mname=new Date(utc(t)).toLocaleDateString('en-PH',{month:'long',timeZone:'UTC'});
   if(!P.ok)return `<div class="card"><h3>Budget sa stock <span class="mute sm">(${mname})</span></h3><div class="mute">Kulang pa ang benta log (kailangan ng 3+ araw na may benta sa huling 28 araw) para makuwenta ang budget.</div></div>`;
   const row=(l,v,c)=>`<div class="row"><span>${l}</span><b${c?` class="${c}"`:''}>${v}</b></div>`;
-  const bShort=P.surplus<0,cShort=P.cashSurplus<0,buf0=+S.settings.buffer||0,CC=cashCal(P,S.log,S.pay,t,cash,buf0,14);
+  const bShort=P.surplus<0,cShort=P.cashSurplus<0,buf0=+S.settings.buffer||0,CC=cashCal(P,S.log,S.pay,t,cash,buf0,14,{rec:true});
   const used=P.spentM+P.dueSup,upc=P.budget>0?Math.min(100,Math.round(used/P.budget*100)):100,ucol=P.R<0?'#c0392b':bShort?'#d9a441':'var(--pri)';
   const obar=`<div class="row" style="border:0;padding-bottom:0"><span>Nagamit at nakalaan na</span><b>${upc}%</b></div><div class="pb" style="margin:4px 0 2px"><i style="width:${upc}%;background:${ucol}"></i></div><div class="sm mute">${peso(used)} ng ${peso(P.budget)} · natira ${peso(P.R)}</div>`;
   const lowC=CC&&CC.low,tiles=`<div class="grid2" style="margin:8px 0">
 <div class="tile"><div class="sm mute">Natirang budget</div><b class="${P.R<0?'neg':''}">${peso(P.R)}</b><div class="sm ${bShort?'neg':'pos'}">${bShort?'⚠ Kulang ng '+peso(-P.surplus)+' sa inaasahang bili':'✓ Kasya ang inaasahang bili'}</div></div>
 <div class="tile"><div class="sm mute">Pinakamababang cash, 14 araw</div><b class="${lowC?'neg':'pos'}">${CC?pe(CC.min):pe(P.cashPool)}</b><div class="sm ${lowC?'neg':'pos'}">${lowC?'⚠ Sa '+dlabel(CC.minDate):'✓ Hindi bababa sa buffer'}</div></div></div>`;
   const warn=lowC?`<div class="banner warn">⚠️ Kapag bumili ka sa dating dalas, maaaring bumaba ang pera mo sa <b>${pe(CC.min)}</b> sa <b>${dlabel(CC.minDate)}</b>${buf0?' (mas mababa sa buffer mong '+peso(buf0)+')':''}. Bawasan ang bili o ipagpaliban ang ilang bayarin.</div>`:(cShort?`<div class="banner warn">⚠️ Kahit kasama ang papasok na benta, kulang pa rin ang pera mo ng <b>${peso(-P.cashSurplus)}</b> para sa inaasahang bili sa susunod na 7 araw. Unahin ang mahalagang supplier at bawasan ang iba.</div>`:(bShort?`<div class="banner warn">⚠️ Hindi kasya ang budget ng buwan sa lahat ng inaasahang bili. Ang mabagal na supplier ang unang kulang.</div>`:''));
-  const safe=CC?Math.floor(Math.max(0,CC.min-buf0)*0.8/100)*100:0;
-  const safeRow=CC?`<div class="row" style="border:0;padding-bottom:0"><span>Pwedeng idagdag na bili ngayon</span><b class="${safe>0?'pos':'neg'}">${peso(safe)}</b></div><div class="sm mute" style="margin-bottom:8px">${safe>0?'Dagdag ito sa mga bili na nakaplano na sa cash projection, mga '+peso(Math.floor(safe/14/10)*10)+' kada araw sa loob ng 14 araw. Tantya, hindi garantiya (binawasan ng 20%).':'Walang pwedeng idagdag. Huwag munang dagdagan ang bili hanggang bumaba ang bayarin o tumaas ang benta.'}</div>`:'';
-  const calD=CC?`<details class="grp"><summary>Cash projection, 14 araw</summary><div style="padding:0 14px 12px"><div class="sm mute">Estimate kada araw: papasok na benta ~${peso(CC.inflow)} (95% ng karaniwan), bili na cash ~${peso(CC.cashRate)}, gastos ~${peso(CC.opexRate)}${CC.persRate>0?', personal na gastos ~'+peso(CC.persRate):''}${CC.creditRate>0?', at bili sa credit ~'+peso(CC.creditRate)+' na lalabas pagkalipas ng ~'+CC.terms+' araw':''}, at ang mga bayarin sa due date nila. Hindi kasama ang benta ngayong araw.</div>${CC.rows.map((x,i)=>`<div class="row sm" style="padding:6px 0"><span>${i===0?'Ngayon':dlabel(x.d)}${x.bills.length?'<div class="mute">'+x.bills.slice(0,3).map(y=>esc(y.name)+' '+peso(y.amt)).join(', ')+(x.bills.length>3?' +'+(x.bills.length-3):'')+'</div>':''}</span><b class="${x.bal<buf0?'neg':''}">${peso(x.bal)}</b></div>`).join('')}</div></details>`:'';
+  const BV=buyVsSales(S.log,S.pay,S.hist,S.shist,t,P.buyPct,4),bvc=r=>r===null?'':r>1?'#c0392b':r>P.buyPct+0.05?'#d9a441':'var(--pri)';
+  const bvWarn=BV.status==='mataas'?`<div class="banner warn">⚠️ Mas marami ang nabili mo (<b>${pe(BV.a28.buy)}</b>) kaysa nabenta (<b>${pe(BV.a28.sales)}</b>) sa nakaraang 4 na linggo, labis na <b>${pe(BV.excess)}</b>. Nakababad na ang pera sa stock o utang. Dahan-dahan muna sa bagong order.</div>`:'';
+  const bvChip=BV.status==='mataas'?'<span class="chip bad">⚠ mataas</span>':BV.status==='medyo'?'<span class="chip am">medyo mataas</span>':BV.status==='ok'?'<span class="chip ok">✓ normal</span>':'<span class="chip">kulang ang datos</span>';
+  const mnum=+t.slice(5,7);
+  const bvD=BV.weeks.some(w=>w.ok)?`<details class="grp"${BV.status==='mataas'?' open':''}><summary>Bili vs Benta, 4 na linggo ${bvChip}</summary><div style="padding:0 14px 12px">
+${BV.weeks.map(w=>`<div class="row sm" style="padding:6px 0 0;border:0"><span>${dlabel(w.start)} – ${dlabel(w.end)}</span><b>${w.ratio===null?'<span class="mute">kulang ang benta log</span>':Math.round(w.ratio*100)+'%'}</b></div><div class="pb" style="margin:3px 0"><i style="width:${w.ratio===null?0:Math.min(100,Math.round(w.ratio/1.2*100))}%;background:${bvc(w.ratio)}"></i></div><div class="sm mute">Bili ${pe(w.buy)} · Benta ${pe(w.sales)}</div>`).join('')}
+<div class="row" style="margin-top:8px"><span>4 na linggo <span class="mute sm">(bili ÷ benta)</span></span><b style="color:${bvc(BV.a28.ratio)}">${BV.a28.ratio===null?'—':Math.round(BV.a28.ratio*100)+'%'}</b></div>
+<div class="row"><span>Huling 2 linggo</span><b style="color:${bvc(BV.a14.ratio)}">${BV.a14.ratio===null?'—':Math.round(BV.a14.ratio*100)+'%'}</b></div>
+<div class="sm mute" style="margin-top:6px">Ang karaniwan mong bili ay mga ${Math.round(P.buyPct*100)}% ng benta (budget %). Kapag lampas 100% nang tuloy-tuloy, mas marami ang nabibili kaysa nabebenta, kaya nababad ang pera sa stock o sa utang. Ang bili ay stock na nalog at bayarin sa supplier, kasama ang utang. Hanggang kahapon lang, at hindi binibilang ang linggong kulang ang benta log.${mnum>=11?' Normal na tumaas ang bili bago mag-Pasko, basta kaya pa ng pera (tingnan ang Forecast 30 araw).':''}</div></div></details>`:'';
+  const RM=buyRoom(P,CC,buf0),room=RM?RM.room:0;
+  const roomWhy=room>0?`Dagdag ito sa mga bili na nakaplano na. Kaya ng budget ng buwan: <b>${peso(RM.budget)}</b> · Kaya ng pera: <b>${peso(RM.cash)}</b>. Ang mas mababa ang sinusunod, kaya hindi ka magigipit. Tantya, hindi garantiya.`:`Walang maidadagdag ngayon. ${RM&&RM.budget<=0?'Wala nang sobra sa budget ng buwan. ':''}${RM&&RM.cash<=0?'Kulang ang pera para sa dagdag na bili. ':''}Huwag munang dagdagan ang bili hanggang bumaba ang bayarin o tumaas ang benta.`;
+  const roomRow=RM?`<div class="row" style="border:0;padding-bottom:0"><span><b>Pwedeng idagdag na bili ngayon</b></span><b class="${room>0?'pos':'neg'}" style="font-size:1.3em">${peso(room)}</b></div><div class="sm mute" style="margin-bottom:8px">${roomWhy}</div>`:'';
   const low=P.lowWeek?`<div class="banner warn">⚠️ Mababa ang benta nitong huling 7 araw (~${peso(P.lowWeek.act)}/araw, dapat ~${peso(P.lowWeek.exp)}). Maaaring mataas pa ang estimate ng budget.</div>`:'';
   const bufv=+S.settings.buffer||0,lst=P.rows.filter(x=>x.reserve>0).sort((x,y)=>y.reserve-x.reserve);
   const hd=(n,t)=>`<div style="font-weight:700;margin:14px 0 2px;color:var(--pri-d)">${n}. ${t}</div>`,cap=t=>`<div class="sm mute" style="margin:2px 0 4px">${t}</div>`;
@@ -690,18 +770,20 @@ ${hd(2,'Inaasahan mo pang bibilhin')}${cap('Base sa dalas ng order ng bawat supp
 ${row('Inaasahang bili',peso(P.totalReserve))}
 <details style="margin:2px 0 6px"><summary class="sm" style="cursor:pointer;color:var(--pri-d)">Sino ang bumubuo nito (${lst.length} supplier)</summary>${lst.map(x=>`<div class="row sm" style="padding:4px 0"><span>${esc(x.name)} <span class="mute">· ${x.visit.left} order × ~${peso(x.visit.avg)}</span></span><span>${peso(x.reserve)}</span></div>`).join('')}</details>
 ${row('<b>'+(bShort?'Kulang sa budget':'Sobra sa budget')+'</b> <span class="mute sm">(natirang budget − inaasahang bili)</span>',peso(Math.abs(P.surplus)),bShort?'neg':'pos')}
+${cap('Budget bawat order = pwede pang bilhin kay supplier ÷ ilang bisita pa niya ngayong buwan. Kapag lumampas ka sa bahagi ng isang bisita, mas kaunti ang matitira para sa susunod niyang mga bisita. Kapag may sobra pa sa budget ng buwan, hindi ka babalaan sa bahagyang paglampas.')}
 ${hd(3,'Pera sa susunod na 7 araw')}${cap('Hinuhulaan ang pera araw-araw: pera ngayon + papasok na benta (95% ng karaniwan) − gastos − personal na gastos (~'+peso(P.persRate)+' kada araw) − bayarin sa due date nila. Ang pinakamababang punto ang binibilang.')}
-${row('Kabuuang pera ngayon <span class="mute sm">(lahat ng wallet)</span>',peso(cash))}
+${row('Pera pambili ngayon <span class="mute sm">('+poolNames()+')</span>',peso(cash))}${poolOutNames()?cap('Hindi kasama: '+poolOutNames()+'. Mapapalitan ito sa Settings, sa Pera pambili.'):''}
 ${row('Bayarin na due sa loob ng 7 araw','− '+peso(sum(S.pay.filter(p=>p.status!=='Paid'&&String(p.due)<=addDays(t,7)),p=>+p.amount||0)))}
 ${row('Pinakamababang cash sa 7 araw',pe(P.minB))}
 ${bufv?row('Buffer','− '+peso(bufv)):''}
 ${row('<b>Cash na pwedeng ipambili</b>'+(P.minB-bufv<0?' <span class="mute sm">(hindi bumababa sa ₱0)</span>':''),pe(P.cashPool))}
 ${row('Kailangan sa inaasahang bili, 7 araw',pe(P.need7))}${cap(P.model.terms<=7?'Lahat ng bili ay binibilang na cash dahil maikli ang utang mo ('+P.model.terms+' araw).':'Cash lang ang binibilang agad ('+Math.round(P.model.cashShare*100)+'% ng bili mo, base sa mga nalog mong stock). Ang credit ay babayaran pagkalipas ng ~'+P.model.terms+' araw, kaya hindi pa ito binibilang dito.')}
 ${row('<b>'+(cShort?'Kulang ang pera':'Sobra sa pera')+'</b>',pe(Math.abs(P.cashSurplus)),cShort?'neg':'pos')}
+${RM?hd(4,'Pwedeng idagdag na bili ngayon')+cap('Ang pinakamababa sa mga ito ang sinusunod. Iisang pondo ito sa "Pwedeng kunin para sa personal" sa Home: kapag kumuha ka para sa personal, bababa ito.')+row('Sobra sa budget ng buwan',peso(RM.budget))+row('Sobra sa pera, 7 araw',peso(RM.cash7))+(RM.cash14!==null?row('Kaya ng pera, 14 araw <span class="mute sm">(pinakamababang cash bawas buffer, binawasan ng 20%)</span>',peso(RM.cash14)):'')+row('<b>Pwedeng idagdag na bili</b>',peso(room),room>0?'pos':'neg'):''}
 </div></details>`;
   const n=P.rows.length,nOk=P.rows.filter(x=>x.fund>0).length,more=n>8&&!ui.supQ?`<button class="ghost full" id="budMore" style="margin-top:8px" data-act="budall">${ui.budAll?'Ipakita ang top 8 lang':'Ipakita lahat ('+n+' supplier)'}</button>`:'';
   const un=P.unnamed>0?`<div class="row" style="border-top:1px dashed var(--line);border-bottom:0"><span class="mute">Walang supplier na nakalagay</span><span>${peso(P.unnamed)}</span></div>`:'';
-  return `<div class="card"><h3>Budget sa stock <span class="mute sm">(${mname})</span></h3>${obar}${tiles}${safeRow}${warn}${low}${simCard(P)}${calD}${how}
+  return `<div class="card"><h3>Budget sa stock <span class="mute sm">(${mname})</span></h3>${roomRow}${obar}${tiles}${warn}${bvWarn}${low}${simCard(P)}${bvD}${how}
 <div class="sub" style="margin-top:12px">Mga supplier <span class="mute sm">(${n}) · ${nOk} ang may inaasahang bili pa</span></div><div class="sm mute">${P.ratio<1?'Kasya ang budget sa <b>'+Math.round(P.ratio*100)+'%</b> ng inaasahang bili. Hinati nang pantay sa lahat ng supplier ang kulang. ':''}Ang bar ay nabili na ÷ inaasahang bili ngayong buwan.</div>
 <input type="search" id="supQ" placeholder="Hanapin ang supplier..." autocomplete="off" value="${esc(ui.supQ||'')}" style="margin:6px 0">
 <div id="supList2">${mbRows()}</div><div id="supNone" class="mute sm hid" style="padding:8px 0">Walang nakitang supplier.</div>${un}${more}</div>`;
@@ -716,14 +798,6 @@ function dupStock(sup,amt,date,skip){
   if(skip!=='pay')S.pay.forEach(p=>{if(p.type==='Supplier'&&supKey(p.name)===k&&Math.abs((+p.baseAmount||+p.amount||0)-a)<1&&(p.status!=='Paid'||near(p.paidDate,3)))out.push('Bayarin: '+(p.status==='Paid'?'bayad '+dlabel(p.paidDate):'due '+dlabel(p.due))+' · '+peso(p.amount));});
   return out;
 }
-function marginCard(){
-  const M=monthlyMargin(S.log,S.pay,S.hist,S.shist,todayStr(),6),cur=+S.settings.margin_pct||0;
-  if(!M.length)return '';
-  const MN=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'],ok=M.filter(x=>x.pct!==null&&x.days>=20),avg=ok.length?Math.round(ok.reduce((t,x)=>t+x.pct,0)/ok.length*10)/10:null;
-  return `<div class="card"><h3>Actual margin (estimate)</h3><div class="sm mute">Benta na binawasan ng nabili mong stock sa buwang iyon.</div>${M.map(x=>`<div class="row"><span>${MN[+x.m.slice(5,7)-1]} ${x.m.slice(0,4)} <span class="mute sm">· ${peso(x.sales)} benta</span></span><b>${x.pct===null?'—':x.pct+'%'}${x.days<20?' <span class="mute sm">(kulang ang araw)</span>':''}</b></div>`).join('')}
-${avg!==null?`<div class="row" style="border-bottom:0"><span>Karaniwan <span class="mute sm">(${ok.length} buwan sa itaas)</span></span><b>${avg}%</b></div><div class="sm ${avg<cur?'neg':'mute'}">${avg<cur?'⚠️ Mas mababa ang actual margin ('+avg+'%) kaysa sa setting mo ('+cur+'%), kaya baka masyadong mataas ang budget sa pambili.':'Ang setting mo ay '+cur+'%. Hindi ko ito binabago nang kusa: ikaw ang magpapasya, lalo na kung may mga item na mahigpit ang tubo.'}</div>`:''}
-<div class="sm mute" style="margin-top:6px">Estimate lang ito: kulang ang lalabas na bili kung may stock na hindi nai-record, kaya maaaring mas mataas ito sa totoo.</div></div>`;
-}
 function accCard(){
   const A=salesAccuracy(dailySales(S.log,S.shist),todayStr(),8);if(A.length<3)return '';
   const mean=Math.round(A.reduce((t,x)=>t+x.err,0)/A.length*10)/10,below=A.filter(x=>x.err<0).length;
@@ -735,8 +809,6 @@ function reviewCard(){
   const ic={ok:'✓',warn:'⚠️',bad:'⚠️'},cl={ok:'pos',warn:'',bad:'neg'};
   const rows=R.items.map(x=>{let t='',d='',btn='';
     if(x.k==='sales'){t='Estimate ng benta';d=`Sa nakaraang ${x.n} linggo, ${x.val>0?'+':''}${x.val}% ang karaniwang pagkakaiba ng totoo sa estimate; ${x.below} linggo ang mas mababa ang totoo. ${x.lvl==='bad'?'Madalas na masyadong mataas ang estimate, kaya huwag ubusin ang budget.':x.lvl==='warn'?(x.val<0?'Medyo mataas ang estimate. Mag-ingat sa pagbili.':'Madalas na mas mataas ang totoo kaysa estimate, kaya konserbatibo ang estimate.'):'Maayos ang estimate.'}`;}
-    if(x.k==='margin'){t='Margin';d=`Actual margin sa huling ${x.n} buwan: <b>${x.val}%</b>. Setting mo: ${x.setting}%. ${x.lvl==='ok'?'Magkalapit ang dalawa.':x.gap<0?'Mas mababa ang actual, kaya maaaring mataas ang Estimated profit.':'Mas mataas ang actual kaysa setting mo. Pero kung may bili na hindi nalog, mataas ang actual na ito kaysa totoo, kaya tiyaking kumpleto ang log bago ito gamitin.'}`;
-      if(x.lvl!=='ok')btn=`<button class="ghost sm" data-act="usemargin" data-v="${x.sug}">Gamitin ang ${x.sug}%</button>`;}
     if(x.k==='budget'){t='Budget sa pambili';d=`Ang aktwal mong bili ay <b>${x.val}%</b> ng benta (huling ${x.n} buwan). Ang budget ng app ay ${x.used}% ng estimated na benta (mababago sa Settings). ${x.lvl==='ok'?'Magkalapit, kaya tama ang budget.':x.gap>0?'Mas mataas ang aktwal mong bili kaysa budget. Maaaring masyadong mataas ang binibili mo kumpara sa benta.':'Mas mababa ang aktwal mong bili kaysa budget, kaya may espasyo pa ang budget.'}`;}
     if(x.k==='data'){t='Kumpleto ba ang log';d=`${x.val} sa huling 28 araw ang may nalog na benta. ${x.lvl==='ok'?'Maayos.':'Kulang ang log, kaya hindi gaanong maaasahan ang mga estimate. I-log araw-araw ang benta at bili.'}`;}
     return `<div class="row" style="display:block"><div>${ic[x.lvl]} <b>${t}</b></div><div class="sm mute">${d}</div>${btn?`<div style="margin-top:6px">${btn}</div>`:''}</div>`;}).join('');
@@ -751,25 +823,28 @@ function renderReports(){
   const sumCard=`<div class="card"><h3>Buod ng ${mlab(ym)}</h3>${msel}
 <div class="row"><span>Benta</span><b>${peso(v.sales)}</b></div>
 <div class="row"><span>Kita sa GCash</span><b>${peso(v.fee)}</b></div>
+${v.other>0?`<div class="row"><span>Ibang kita <span class="mute sm">(labas ng store)</span></span><b>${peso(v.other)}</b></div>`:''}
 <div class="row"><span>Gastos <span class="mute sm">(sweldo, bayarin ng store, iba pa)</span></span><b>${peso(v.exp)}</b></div>
 <div class="row"><span>Binili <span class="mute sm">(stock, kasama ang credit)</span></span><b>${peso(v.buy)}</b></div>
 ${v.m.accrued>0?`<div class="row"><span>Hindi pa nababayarang gastos <span class="mute sm">(due ngayong buwan, kasama sa profit)</span></span><b>${peso(v.m.accrued)}</b></div>`:''}
-<div class="row"><span><b>Estimated actual profit</b></span><b class="${cl(v.real)}">${pe(v.real)}</b></div>
+${v.m.loanPaid>0?`<div class="row"><span>Hulog sa utang ${peso(v.m.loanPaid)} <span class="mute sm">(interes lang ang gastos)</span></span><b>${v.m.loanInt>0?peso(v.m.loanInt):'<span class="neg">₱0, ilagay sa Settings</span>'}</b></div>`:''}
+<div class="row"><span><b>Estimated actual profit</b>${v.other>0?' <span class="mute sm">(kasama ang ibang kita)</span>':''}</span><b class="${v.real===null?'':cl(v.real)}">${v.real===null?'—':pe(v.real)}</b></div>
 ${v.gross!==null?`<div class="row sub2"><span class="mute">Estimated kita kada araw <span class="sm">(bago gastos)</span></span><span>${pe(v.gross)}</span></div>`:''}
 ${v.net!==null?`<div class="row sub2"><span class="mute">Estimated tubo kada araw <span class="sm">(pagkatapos ng gastos, ${v.el} araw)</span></span><span class="${cl(v.net)}">${pe(v.net)}</span></div>`:''}
 ${v.avgSales!==null?`<div class="row sub2"><span class="mute">Average benta kada araw <span class="sm">(${v.ds} araw na may benta)</span></span><span>${peso(v.avgSales)}</span></div>`:''}
-<div class="sm mute" style="margin-top:6px">Base sa actual margin na <b>${v.basis.p}%</b> (${v.basis.l}). Estimate lang ito at kapareho ng nasa Home.</div></div>`;
+<div class="sm mute" style="margin-top:6px">${v.basis?`Base sa actual margin na <b>${v.basis.p}%</b> (${v.basis.l}). Estimate lang ito at kapareho ng nasa Home.`:'Kulang pa ang datos ng bili para makuwenta ang tubo. Ilagay muna ang mga bili sa Bili para magkaroon ng actual margin.'}</div></div>`;
   // paghahambing ng mga buwan
   const MM=monthlyMargin(S.log,S.pay,S.hist,S.shist,t,6),cm=curMargin(S.log,S.pay,S.hist,S.shist,t,Math.max(1,+t.slice(8,10))),cmrow=cm.sales>0?{m:cur,days:cm.days,sales:cm.sales,buy:cm.buy,pct:cm.buy>0?Math.round((1-cm.buy/cm.sales)*1000)/10:null,part:true}:null;
-  const rows=MM.concat(cmrow?[cmrow]:[]).reverse(),cmpCard=rows.length?`<div class="card"><h3>Paghahambing ng mga buwan</h3><div class="sm mute">Benta laban sa binili. Ang margin ay (benta − binili) ÷ benta.</div>
+  const okM=MM.filter(x=>x.pct!==null&&x.days>=20),avgM=okM.length?Math.round(okM.reduce((a,x)=>a+x.pct,0)/okM.length*10)/10:null,rows=MM.concat(cmrow?[cmrow]:[]).reverse(),cmpCard=rows.length?`<div class="card"><h3>Paghahambing ng mga buwan</h3><div class="sm mute">Benta laban sa binili. Ang margin ay (benta − binili) ÷ benta.</div>
 <div class="row sm" style="font-weight:600"><span style="flex:1">Buwan</span><span style="flex:1;text-align:right">Benta</span><span style="flex:1;text-align:right">Binili</span><span style="width:52px;text-align:right">Margin</span></div>
-${rows.map(x=>`<div class="row sm"><span style="flex:1">${sh(x.m)}${x.part?' <span class="mute">(kasalukuyan)</span>':''}</span><span style="flex:1;text-align:right">${peso(Math.round(x.sales))}</span><span style="flex:1;text-align:right">${peso(Math.round(x.buy))}</span><span style="width:52px;text-align:right">${x.pct===null?'—':x.pct+'%'}</span></div>`).join('')}
-<div class="sm mute" style="margin-top:6px">Maaaring mataas ang margin ng buwan na mababa ang binili at mababa kapag malaki ang binili, kaya mas mapagkakatiwalaan ang average ng ilang buwan.</div></div>`:'';
+${rows.map(x=>`<div class="row sm"><span style="flex:1">${sh(x.m)}${x.part?' <span class="mute">(kasalukuyan)</span>':x.days<20?' <span class="mute">(kulang ang araw)</span>':''}</span><span style="flex:1;text-align:right">${peso(Math.round(x.sales))}</span><span style="flex:1;text-align:right">${peso(Math.round(x.buy))}</span><span style="width:52px;text-align:right">${x.pct===null?'—':x.pct+'%'}</span></div>`).join('')}
+${avgM!==null?`<div class="row sm" style="font-weight:600;border-bottom:0"><span style="flex:1">Karaniwan <span class="mute">(${okM.length} buwan, buong buwan lang)</span></span><span style="width:52px;text-align:right">${avgM}%</span></div>`:''}
+<div class="sm mute" style="margin-top:6px">Maaaring mataas ang margin ng buwan na mababa ang binili at mababa kapag malaki ang binili, kaya mas mapagkakatiwalaan ang average ng ilang buwan. Estimate lang ito: kulang ang bili kung may stock na hindi nai-record, kaya maaaring mas mataas ito sa totoo.</div></div>`:'';
   // supplier ng piniling buwan
   const from=ym+'-01',to=ym+'-'+String(new Date(Date.UTC(+ym.slice(0,4),+ym.slice(5,7),0)).getUTCDate()).padStart(2,'0'),to2=to<t?to:t,sp=supSpend(S.log,S.pay,S.hist,to2,from),keys=Object.keys(sp).filter(k=>sp[k].amt>0).sort((a,b)=>sp[b].amt-sp[a].amt),tot=keys.reduce((a,k)=>a+sp[k].amt,0),V=supVisits(S.log,S.pay,S.hist,t);
   const supCard=keys.length?`<div class="card"><h3>Supplier ngayong ${mlab(ym)}</h3><div class="sm mute">Pinakamalaki ang binili mo sa itaas.</div>${keys.slice(0,10).map(k=>`<div class="row sm"><span>${esc(sp[k].name||'Walang supplier na nakalagay')}<div class="mute">${tot>0?Math.round(sp[k].amt/tot*100):0}% ng kabuuan${V[k]?' · karaniwang order kada '+V[k].every+' araw, ~'+peso(V[k].avg):''}</div></span><b>${peso(Math.round(sp[k].amt))}</b></div>`).join('')}
 ${keys.length>10?`<div class="sm mute" style="margin-top:6px">At ${keys.length-10} pang supplier.</div>`:''}<div class="row" style="border-bottom:0"><span>Kabuuan</span><b>${peso(Math.round(tot))}</b></div></div>`:'';
-  return `<h2 style="margin:0 0 10px">Reports</h2>${sumCard}${cmpCard}${supCard}${reviewCard()}${marginCard()}${accCard()}`;
+  return `<h2 style="margin:0 0 10px">Reports</h2>${sumCard}${cmpCard}${supCard}${reviewCard()}${accCard()}`;
 }
 function backupCard(){return `<div class="card"><h3>Backup</h3><div class="sm mute">I-download ang kopya ng lahat ng datos mo (log, bayarin, wallets, supplier, kasaysayan) bilang file. Itabi ito sa ligtas na lugar.</div><button class="ghost full" style="margin-top:8px" data-act="backup">⬇️ I-download ang backup</button><label style="margin-top:14px">I-restore mula sa backup</label><input type="file" accept=".json,application/json" data-restore><div class="sm mute" style="margin-top:6px">Papalitan nito ang LAHAT ng datos ngayon. Awtomatiko munang dino-download ang kasalukuyang datos bago palitan.</div></div>`;}
 function cashCard(){
@@ -805,10 +880,30 @@ function simHTML(){
   return `${verdict}${bar('Budget na nagamit, dati',b)}${bar('Pagkatapos ng bili',a)}
 ${ar('Natirang budget',b.R,a.R,sgn,true)}
 ${ar('Pwede pang bilhin kay '+esc(R.sup)+' (budget)',b.fund,a.fund,peso,true,b.reserve>0||a.reserve>0?'inaasahan pa: '+peso(b.reserve)+' → '+peso(a.reserve):'')}
-${ar('Pera ngayon',b.cash,a.cash,sgn,true,R.mode==='cash'?'':'Utang: hindi pa lumalabas ang pera, due '+dlabel(addDays(t,R.terms)))}
+${ar('Pera pambili ngayon',b.cash,a.cash,sgn,true,R.mode==='cash'?'':'Utang: hindi pa lumalabas ang pera, due '+dlabel(addDays(t,R.terms)))}
 ${ar('Pinakamababang cash, 14 araw',b.min,a.min,sgn,true,a.min!==b.min||a.minDate!==b.minDate?'sa '+dlabel(b.minDate)+' → '+dlabel(a.minDate):'')}
 ${ar('Cash na pwedeng ipambili, 7 araw',b.pool7,a.pool7,peso,true)}
 <div class="sm mute" style="margin-top:6px">Estimate lang ito, hindi nase-save at hindi gumagalaw ang totoong datos mo. Binibilang ito bilang bili ngayong araw (${R.mode==='cash'?'binayaran agad':'utang na due sa '+R.terms+' araw'}).</div>`;
+}
+function projCard(P,CC30,CR,buf0){ // iisang 30-araw na projection ng Home, galing sa kalendaryo ng pera
+  const bl=x=>esc(x.name)+' '+peso(x.amt)+' <span class="mute">('+dlabel(x.d)+')</span>';
+  const crHTML=CR?`<div class="${CR.low?'banner warn':'sm'}" style="margin:8px 0">${CR.low?`⚠️ Pinakasiksik ang <b>${dlabel(CR.minDate)}</b>: bababa ang pera sa <b>${pe(CR.min)}</b>, kulang ng <b>${pe(CR.gap)}</b> ${buf0?'sa buffer mong '+peso(buf0):'para hindi bumaba sa ₱0'}.`:`✓ Hindi bababa sa buffer sa susunod na 30 araw. Pinakamababa: <b>${pe(CR.min)}</b> sa ${dlabel(CR.minDate)}.`}</div>`
+    +(CR.low?`<div class="sm" style="margin:6px 0"><b>Mga bayarin hanggang ${dlabel(CR.minDate)}</b>
+${CR.flex.length?`<div style="margin-top:4px">Sa supplier <span class="mute">(pwedeng makiusap na iurong)</span>:</div>${CR.flex.map(x=>`<div class="row sm" style="padding:3px 0;border:0"><span>${bl(x)}</span></div>`).join('')}`:''}
+${CR.fixed.length?`<div style="margin-top:4px">Iba pa <span class="mute">(sweldo, personal, store, hulog; hindi ko isinama sa iuurong)</span>:</div>${CR.fixed.map(x=>`<div class="row sm" style="padding:3px 0;border:0"><span>${bl(x)}${x.rec?' <span class="mute">· paulit-ulit</span>':''}</span></div>`).join('')}`:''}</div>`:'')
+    +(CR.low&&CR.plan&&!CR.plan.moves.length?`<div class="sm" style="margin:8px 0;padding:10px;border-radius:12px;background:var(--soft,#f3ecdc)">Hindi maaayos ng pag-urong (${CR.plan.days} araw) ng bayarin sa supplier ang kakulangan. Mas malaki ang labas kaysa pasok sa loob ng 30 araw, kaya mababa pa rin ang pera sa ${dlabel(CR.minDate)}. Bawasan ang bagong bili o humanap ng dagdag na pera.</div>`:'')
+    +(CR.low&&CR.plan&&CR.plan.moves.length?`<div class="sm" style="margin:8px 0;padding:10px;border-radius:12px;background:var(--soft,#f3ecdc)"><b>Kung maiuurong ng ${CR.plan.days} araw:</b>
+${CR.plan.moves.map(x=>`<div>${esc(x.name)} ${peso(x.amt)} <span class="mute">(${dlabel(x.from)} → ${dlabel(x.to)})</span></div>`).join('')}
+<div style="margin-top:6px">${CR.plan.enough?`✓ Hindi na bababa sa buffer. Pinakamababa na ang <b>${pe(CR.plan.after.min)}</b> sa ${dlabel(CR.plan.after.minDate)}.`:`⚠️ Kahit iurong lahat ng bayarin sa supplier, kulang pa rin ng <b>${pe(CR.plan.left)}</b> (pinakamababa: ${pe(CR.plan.after.min)} sa ${dlabel(CR.plan.after.minDate)}). Bawasan ang bagong bili o humanap ng dagdag na pera.`}</div><div class="mute" style="margin-top:4px">Tunay na kuwenta ulit ito gamit ang parehong estimate sa ibaba. Ikaw pa rin ang magdedesisyon; kailangan mong kausapin ang supplier.</div></div>`:(CR.low&&!CR.flex.length?`<div class="sm" style="margin:8px 0">Walang bayarin sa supplier na iuurong bago ang petsang iyon. Bawasan muna ang bagong bili.</div>`:''))
+    +(CR.heavy.length?`<div class="sm" style="margin:6px 0"><b>Mabibigat na araw ng bayarin</b>${CR.heavy.map(h=>`<div class="row sm" style="padding:3px 0;border:0"><span>${h.i===0?'Ngayon':dlabel(h.d)}<div class="mute">${h.bills.slice(0,3).map(y=>esc(y.name)).join(', ')}${h.bills.length>3?' +'+(h.bills.length-3):''}</div></span><b>${peso(h.out)}</b></div>`).join('')}</div>`:''):'';
+  const R=CC30.rows,at=n=>R[Math.min(n,R.length-1)],due=n=>sum(R.slice(0,Math.min(n,R.length-1)+1),r=>r.out);
+  return `<div class="card"><h3>Forecast 30 araw${CR&&CR.low?' <span class="chip bad">⚠ siksikan</span>':''}</h3>${spark(R)}
+<table class="fct"><tr><th></th><th>7 araw</th><th>14 araw</th><th>30 araw</th></tr>
+<tr><td>Due</td>${[7,14,30].map(n=>`<td>${pe(due(n))}</td>`).join('')}</tr>
+<tr><td>Pera pagkatapos</td>${[7,14,30].map(n=>`<td class="${cls(at(n).bal)}"><b>${pe(at(n).bal)}</b></td>`).join('')}</tr></table>
+${crHTML}
+<div class="sm mute" style="margin-top:6px">Panimula: pera pambili na ${pe(CC30.start)}. Estimate kada araw: papasok na benta ~${peso(CC30.inflow)} (95% ng karaniwan), bili na cash ~${peso(CC30.cashRate)}, gastos ~${peso(CC30.opexRate)}${CC30.persRate>0?', personal na gastos ~'+peso(CC30.persRate):''}${CC30.creditRate>0?', at bili sa credit ~'+peso(CC30.creditRate)+' na lalabas pagkalipas ng ~'+CC30.terms+' araw':''}, at ang mga bayarin sa due date nila, kasama ang susunod na paulit-ulit na bayarin. Hindi kasama ang benta ngayong araw. Mas malabo ang hula sa mas malayong araw.</div>
+<details class="grp" style="margin-top:8px"><summary>Araw-araw, 30 araw</summary><div style="padding:0 14px 12px">${R.map((x,i)=>`<div class="row sm" style="padding:6px 0"><span>${i===0?'Ngayon':dlabel(x.d)}${x.bills.length?'<div class="mute">'+x.bills.slice(0,3).map(y=>esc(y.name)+' '+peso(y.amt)).join(', ')+(x.bills.length>3?' +'+(x.bills.length-3):'')+'</div>':''}</span><b class="${x.bal<buf0?'neg':''}">${peso(x.bal)}</b></div>`).join('')}</div></details></div>`;
 }
 function simCard(P){
   const s=ui.sim||{},M=P.model,names=supKnown().sort((a,b)=>a.localeCompare(b));
@@ -821,13 +916,36 @@ function simCard(P){
 <div id="simTermsBox"${mode==='cash'?' class="hid"':''}><label>Ilang araw bago ang due</label><input id="simTerms" type="number" inputmode="numeric" min="0" step="1" value="${esc(terms)}"></div>
 <div id="simOut" style="margin-top:8px">${simHTML()}</div></div></details>`;
 }
-function overMsg(supplier,amt){
-  const P=window.__P;if(!P||!P.ok||!(amt>0))return'';
-  const k=supKey(supplier),x=P.rows.find(r=>r.key===k),m=[];
-  if(x&&x.reserve>0&&amt>x.fund)m.push('Lampas ito ng '+peso(amt-x.fund)+' sa pwede pang bilhin kay '+x.name+' ('+peso(x.fund)+' sa budget).');
-  else if(x&&!(x.reserve>0)&&amt>0&&P.R<amt)m.push('Wala nang inaasahang bili kay '+x.name+' ngayong buwan.');
-  if(amt>P.R)m.push('Lampas din ito sa natirang budget ng buwan ('+peso(Math.max(0,P.R))+').');
+let _pn=null;
+function planNow(){ // laging sariwang kuwenta ng budget (hindi galing sa lumang Home), para tama pa rin kahit ilang bili na ang nailagay
+  const t=todayStr(),now=Date.now();
+  if(_pn&&_pn.S===S&&_pn.t===t&&now-_pn.at<800)return _pn.P;
+  const P=monthPlan(S.settings,S.log,S.pay,S.hist,t,calcWallets(S.settings,S.log,S.pay,S.transfers).pool,S.shist);
+  _pn={S,t,at:now,P};return P;
+}
+function overMsg(supplier,amt,date){
+  if(date&&String(date)<todayStr())return''; // nakalipas na bili, talaan na lang ito at hindi na desisyon
+  const f=buyCheck(planNow(),supplier,amt),m=[];
+  f.forEach(x=>{
+    if(x.t==='sup')m.push('Lampas ito ng '+peso(x.over)+' sa pwede pang bilhin kay '+x.name+' ('+peso(x.fund)+' sa budget'+(x.n>1&&x.pv>0?', mga '+peso(x.pv)+' bawat order':'')+').');
+    else if(x.t==='none')m.push('Wala nang inaasahang bili kay '+x.name+' ngayong buwan.');
+    else if(x.t==='visit')m.push(x.cash
+      ?'Lampas ito ng '+peso(x.over)+' sa kayang bilhin ni '+x.name+' sa susunod na 7 araw ('+peso(x.pv)+' bawat order, kulang ang pera).'
+      :'Lampas ito ng '+peso(x.over)+' sa budget bawat order kay '+x.name+' ('+peso(x.pv)+' = '+peso(x.basis)+' ÷ '+x.div+' pang bisita). Matitira na lang ang '+peso(x.left)+' para sa '+x.rest+' pang bisita niya'+(x.rest>1?' (mga '+peso(x.next)+' bawat isa)':'')+'.');
+    else if(x.t==='month')m.push('Lampas din ito sa natirang budget ng buwan ('+peso(x.R)+').');
+  });
   return m.join('\n');
+}
+function biliHint(){
+  const f=document.getElementById('fBili'),h=document.getElementById('biliHint');if(!f||!h)return;
+  const sup=f.elements.supplier.value,amt=+f.elements.amount.value,date=f.elements.date.value;
+  if(!sup||sup==='__new'){h.innerHTML='';return;}
+  const P=planNow();if(!P.ok){h.innerHTML='';return;}
+  const x=P.rows.find(r=>r.key===supKey(sup));
+  let line=x&&x.reserve>0?'Budget bawat order kay <b>'+esc(x.name)+'</b>: <b>'+peso(x.perVisit)+'</b> <span class="mute">('+peso(x.pvBasis)+' ÷ '+x.pvDiv+' pang bisita'+(x.pvLimit==='cash'?', limitado ng pera sa 7 araw':'')+')</span>':x?'Wala nang inaasahang order kay <b>'+esc(x.name)+'</b> ngayong buwan.':'';
+  line+=(line?'<br>':'')+'Natirang budget ng buwan: <b>'+peso(Math.max(0,P.R))+'</b>';
+  if(amt>0&&!(date&&date<todayStr())){const om=overMsg(sup,amt,date);line+=om?'<div class="neg" style="margin-top:4px">⚠️ '+esc(om).replace(/\n/g,'<br>')+'</div>':'<div class="pos" style="margin-top:4px">✓ Kasya ito sa budget</div>';}
+  h.innerHTML=line;
 }
 function visTxt(v){
   const dl=s=>dlabel(s);
@@ -958,17 +1076,19 @@ ${brows}${mouth}${tears}${sweat}
 <circle cx="60" cy="17" r="10" fill="#f59e0b"/><ellipse cx="56.5" cy="13.5" rx="3.2" ry="2" fill="#fde68a" opacity=".8"/><path d="M60 7.5 Q67 1 74 5.5 Q67 11 60 7.5Z" fill="#22a04a"/></svg>`;
 }
 function renderHome(){
-  const t=todayStr(),Pm=monthPlan(S.settings,S.log,S.pay,S.hist,t,calcWallets(S.settings,S.log,S.pay,S.transfers).total,S.shist),fopt=Pm.ok?{creditRate:Pm.model.creditRate,terms:Pm.model.terms,persRate:Pm.model.persRate}:null,f=forecast(S.settings,S.log,S.pay,t,30,S.transfers,fopt),cur=t.slice(0,7),ym=ui.month&&/^\d{4}-\d{2}$/.test(ui.month)?ui.month:cur,m=monthSummary(S.settings,S.log,S.pay,ym);
-  const MN=['January','February','March','April','May','June','July','August','September','October','November','December'],mlab=k=>MN[+k.slice(5,7)-1]+' '+k.slice(0,4);
-  const ms=new Set([cur]);S.log.forEach(l=>{if(/^\d{4}-\d{2}/.test(String(l.date)))ms.add(String(l.date).slice(0,7));});S.pay.forEach(p=>{if(p.status==='Paid'&&/^\d{4}-\d{2}/.test(String(p.paidDate)))ms.add(String(p.paidDate).slice(0,7));});
-  const msel=`<select id="monthSel" aria-label="Pumili ng buwan">${[...ms].sort().reverse().map(k=>`<option value="${k}" ${k===ym?'selected':''}>${k===cur?'Ngayong buwan · ':''}${mlab(k)}</option>`).join('')}</select>`;
-  const buf=+S.settings.buffer||0;
+  const t=todayStr(),Pm=monthPlan(S.settings,S.log,S.pay,S.hist,t,calcWallets(S.settings,S.log,S.pay,S.transfers).pool,S.shist),fopt=Pm.ok?{creditRate:Pm.model.creditRate,terms:Pm.model.terms,persRate:Pm.model.persRate}:null,f=forecast(S.settings,S.log,S.pay,t,30,S.transfers,fopt),cur=t.slice(0,7);
+  const buf=+S.settings.buffer||0,CC30=Pm.ok?cashCal(Pm,S.log,S.pay,t,f.cash0,buf,30,{rec:true}):null,CR=CC30?crunch(CC30,buf):null,HR=headroom(CC30,buf); // iisang kalendaryo ng pera ang pinagmumulan ng projection kapag may sapat na datos
   let b='ok',msg='Sapat ang cash mo sa susunod na 30 araw.';
-  if(f.firstNeg){b='bad';msg=`⚠️ Magkakaroon ng cash shortage sa <b>${dlabel(f.firstNeg.date)}</b> (${peso(Math.round(f.firstNeg.bal))}).${f.minDate!==f.firstNeg.date?' Pinakamababa ang cash balance mo sa <b>'+dlabel(f.minDate)+'</b> ('+peso(Math.round(f.min))+')'+(fopt&&fopt.creditRate>0&&diffDays(t,f.minDate)>fopt.terms?', kasama ang estimate sa mga bili sa credit na hindi pa nalolog':'')+'.':''} Kailangan mo ng dagdag na <b>${peso(Math.ceil(buf-f.min))}</b> para manatili sa buffer.${f.lowData?' <span class="mute">(Bayarin lang ang binilang; wala pang datos ng benta.)</span>':''}`;}
+  if(CC30){
+    const neg=CC30.rows.find(r=>r.bal<0);
+    if(neg){b='bad';msg=`⚠️ Magkakaroon ng cash shortage sa <b>${dlabel(neg.d)}</b> (${peso(Math.round(neg.bal))}).${CC30.minDate!==neg.d?' Pinakamababa ang cash balance mo sa <b>'+dlabel(CC30.minDate)+'</b> ('+peso(Math.round(CC30.min))+').':''} Kailangan mo ng dagdag na <b>${peso(Math.ceil(buf-CC30.min))}</b> para manatili sa buffer.`;}
+    else if(CC30.min<buf){b='warn';msg=`Mababa ang cash sa <b>${dlabel(CC30.minDate)}</b> (${peso(CC30.min)}), mas mababa sa buffer mo na ${peso(buf)}.`;}
+  }else if(f.firstNeg){b='bad';msg=`⚠️ Magkakaroon ng cash shortage sa <b>${dlabel(f.firstNeg.date)}</b> (${peso(Math.round(f.firstNeg.bal))}).${f.minDate!==f.firstNeg.date?' Pinakamababa ang cash balance mo sa <b>'+dlabel(f.minDate)+'</b> ('+peso(Math.round(f.min))+')'+(fopt&&fopt.creditRate>0&&diffDays(t,f.minDate)>fopt.terms?', kasama ang estimate sa mga bili sa credit na hindi pa nalolog':'')+'.':''} Kailangan mo ng dagdag na <b>${peso(Math.ceil(buf-f.min))}</b> para manatili sa buffer.${f.lowData?' <span class="mute">(Bayarin lang ang binilang; wala pang datos ng benta.)</span>':''}`;}
   else if(f.min<buf){b='warn';msg=`Mababa ang cash sa <b>${dlabel(f.minDate)}</b> (${peso(f.min)}), mas mababa sa buffer mo na ${peso(buf)}.`;}
   const recent=S.log.some(l=>l.date>=addDays(t,-14));
   const notes=[];
-  if(f.lowData)notes.push('Kulang pa ang datos ng benta (kailangan ng 3+ araw). Cash at bayarin lang ang binilang sa forecast; walang papasok na benta.');
+  if(CC30){const net=CC30.inflow-CC30.buyRate-CC30.opexRate-CC30.persRate;if(net<0)notes.push(`Negatibo ang tantya ng cash flow mo: mga ${peso(-net)} kada araw (mas malaki ang labas kaysa pasok, kasama ang bili at personal na gastos).`);}
+  else if(f.lowData)notes.push('Kulang pa ang datos ng benta (kailangan ng 3+ araw). Cash at bayarin lang ang binilang sa forecast; walang papasok na benta.');
   else if(f.daily<0)notes.push(`Negatibo ang average na cash flow mo: ${peso(-f.daily)} kada araw (mas malaki ang labas kaysa pasok).`);
   const ss=stockStats(S.log,t);
   if(ss.days>=2){notes.push(`Stock/COD na nalog (28 araw): ~${peso(ss.week)} kada linggo, kasama na sa estimate. Pinakamalaki sa isang araw: ${peso(ss.max)}.`);
@@ -991,62 +1111,55 @@ function renderHome(){
   const mascot=`<div class="mascot ${b}">${mascotSVG(b)}<div class="bubble"><div class="nm">Kapi</div>${msg}${notes.map(n=>`<div class="n">${n}</div>`).join('')}</div></div>`;
   const up=f.events.slice(0,6).map(e=>`<div class="item"><div>${esc(e.name)}<span class="tag ${e.overdue?'od':''}">${e.overdue?'OVERDUE':esc(e.type)}</span><div class="sm mute">${dlabel(e.due)}${e.day>0?' · '+e.day+' araw':''}${e.rec?' · susunod na ulit (paulit-ulit na bayarin)':''}</div></div><b>${peso(e.amount)}</b></div>`).join('')||'<div class="mute">Walang nakabinbing bayarin.</div>';
 
-  const budgetCard=mbCard(t);
-  let verdict='';const isCur=ym===cur;
+  const budgetCard=mbCard(t),v=profitView(S.settings,S.log,S.pay,S.hist,S.shist,cur,t),m=v.m;
+  let verdict='';
   if(m.sales>0){
-    if(!isCur){}else if(m.storeNet<0)verdict='Negatibo ang net ng store ngayong buwan: mas malaki ang labas ng pera kaysa pasok.';
+    if(m.storeNet<0)verdict='Negatibo ang net ng store ngayong buwan: mas malaki ang labas ng pera kaysa pasok.';
     else verdict='Positibo ang net ng store ngayong buwan.';
   }
   const dueS=S.pay.filter(p=>p.status!=='Paid'&&String(p.due)<=addDays(t,3)).sort((a,b)=>String(a.due).localeCompare(String(b.due)));
   const dueB=dueS.length?`<button class="banner warn" data-tab="bills" style="width:100%;text-align:left;border:0;font:inherit;margin-bottom:12px;display:block"><b>${dueS.length} bayarin</b> ang ${dueS.some(p=>String(p.due)<t)?'overdue o ':''}due sa loob ng 3 araw · ${peso(sum(dueS,p=>+p.amount||0))}<div class="sm" style="margin-top:4px">${dueS.slice(0,3).map(p=>esc(p.name)+' ('+(String(p.due)<t?'overdue':String(p.due)===t?'ngayon':dlabel(p.due))+')').join(', ')}${dueS.length>3?' at '+(dueS.length-3)+' pa':''}</div></button>`:'';
-  return `<div class="two"><div>${hello}${mascot}${dueB}<div class="card"><h3>Kabuuang pera</h3><div class="big ${cls(f.cash0)}">${peso(f.cash0)}</div>
-${tiles()}
-${ui.bd?`<div class="bdbox"><b>Paano nabuo ang ${esc(bdW().name)}</b>${breakdown(S.settings,S.log,S.pay,S.transfers,ui.bd).map(x=>`<div class="row"><span>${x[0]}</span><span class="${x[1]<0?'neg':''}">${x[1]<0?'−':''}${peso(Math.abs(x[1]))}</span></div>`).join('')}<div class="row"><b>Kabuuan</b><b>${peso(wbal(calcWallets(S.settings,S.log,S.pay,S.transfers),bdW()))}</b></div><div class="sm mute">Kung may mali, hanapin dito kung alin ang sobra o kulang, tapos burahin o ayusin ang entry.</div>${ui.bd==='drawer'&&f.drawer>0?`<button class="full" style="margin-top:10px" data-act="drawer2cash">Ilipat ang ${peso(f.drawer)} sa Cash</button>`:''}</div>`:''}
-<div class="sm mute">Pwedeng kunin para sa personal (bukod sa nakalistang bayarin${fopt&&fopt.persRate>0?' at sa karaniwan mong personal na gastos':''}): <b>${pe(f.safe)}</b></div>
-<div class="row" style="margin-top:8px"><span>Ligtas na gastusin kada linggo</span><b>${peso(f.weekly)}</b></div><div class="sm mute">Para manatili sa buffer sa susunod na 4 na linggo, pagkatapos ng mga bayarin, stock, at gastos. 70% lang ng karaniwang kita ang isinama.${f.lowData?' Walang kita na isinama dahil kulang pa ang datos ng benta.':''}</div></div>
-
-<div class="card"><h3>Forecast 30 araw</h3>${spark(f.series)}
-<table><tr><th></th><th>7 araw</th><th>14 araw</th><th>30 araw</th></tr>
+  const fc=CC30?projCard(Pm,CC30,CR,buf):`<div class="card"><h3>Forecast 30 araw</h3>${spark(f.series)}
+<table class="fct"><tr><th></th><th>7 araw</th><th>14 araw</th><th>30 araw</th></tr>
 <tr><td>Due</td><td>${pe(f.due[7])}</td><td>${pe(f.due[14])}</td><td>${pe(f.due[30])}</td></tr>
 <tr><td>Pera pagkatapos</td>${[7,14,30].map(n=>`<td class="${cls(f.proj[n])}"><b>${pe(f.proj[n])}</b></td>`).join('')}</tr></table>
-<div class="sm mute" style="margin-top:6px">${f.lowData?'Walang kasamang papasok na benta (kulang pa ang log).':'Batay sa average mong pasok/labas (huling 14 araw): '+pe(f.daily)+'/araw'}${fopt&&fopt.creditRate>0&&!f.lowData?' Kasama ang estimate sa mga bili sa credit na hindi pa nalolog (~'+pe(fopt.creditRate)+'/araw, due pagkalipas ng ~'+fopt.terms+' araw).':''}</div></div>
-<div class="card"><h3>Susunod na bayarin</h3>${up}</div>
-<div class="card"><h3>${ym===cur?'Ngayong buwan':mlab(ym)}</h3>${msel}
+<div class="sm mute" style="margin-top:6px">Panimula: pera pambili na ${pe(f.cash0)}. ${f.lowData?'Walang kasamang papasok na benta (kulang pa ang log).':'Batay sa average mong pasok/labas (huling 14 araw): '+pe(f.daily)+'/araw'}${fopt&&fopt.creditRate>0&&!f.lowData?' Kasama ang estimate sa mga bili sa credit na hindi pa nalolog (~'+pe(fopt.creditRate)+'/araw, due pagkalipas ng ~'+fopt.terms+' araw).':''}</div></div>`;
+  const mrow=(l,x,c)=>`<div class="row sub2"><span class="mute">${l}</span><span${c?` class="${c}"`:''}>${x}</span></div>`;
+  const monthCard=`<div class="card"><h3>Ngayong buwan</h3>
 <div class="row"><span>Benta</span><b>${peso(m.sales)}</b></div>
-${(()=>{const ds=new Set(S.log.filter(l=>String(l.date).slice(0,7)===ym&&(+l.sales||0)>0).map(l=>l.date));return ds.size?`<div class="row sub2"><span class="mute">Average benta kada araw <span class="sm">(${ds.size} araw na may benta)</span></span><span>${peso(Math.round(m.sales/ds.size))}</span></div>`:'';})()}
 <div class="row"><span>Kita sa GCash</span><b>${peso(m.fee)}</b></div>
-<div class="row sub2"><span class="mute">Cash-in fee</span><span>${peso(m.feeIn)}</span></div>
-<div class="row sub2"><span class="mute">Cash-out fee</span><span>${peso(m.feeOut)}</span></div>
-<div class="row sub2"><span class="mute">Load (benta − gastos sa GCash)</span><span>${peso(m.loadP)}</span></div>
-<div class="row"><span class="mute">Stock (binili + bayad supplier)</span><span>${peso(m.stock+m.sup)}</span></div>
-<div class="row sub2"><span class="mute">Stock na nilog</span><span>${peso(m.stock)}</span></div>
-<div class="row sub2"><span class="mute">Bayad supplier</span><span>${peso(m.sup)}</span></div>
-<div class="row"><span class="mute">Gastos (hindi stock)</span><span>${peso(m.opex+m.staff+m.store)}</span></div>
-<div class="row sub2"><span class="mute">Gastos sa log</span><span>${peso(m.opex)}</span></div>
-<div class="row sub2"><span class="mute">Sweldo</span><span>${peso(m.staff)}</span></div>
-<div class="row sub2"><span class="mute">Bayarin ng store (upa, kuryente...)</span><span>${peso(m.store)}</span></div>
-<div class="row"><span class="mute">Labas ng pera sa store (stock + gastos)</span><span>${peso(m.storeOut)}</span></div>
+${m.other>0?`<div class="row"><span>Ibang kita <span class="mute sm">(labas ng store)</span></span><b>${peso(m.other)}</b></div>`:''}
 <div class="row"><span>Net ng store <span class="mute sm">(pera, hindi tubo)</span></span><b class="${cls(m.storeNet)}">${peso(m.storeNet)}</b></div>
-<div class="row"><span>Estimated profit (${+S.settings.margin_pct||0}% margin)</span><b class="${cls(m.estProfit)}">${pe(m.estProfit)}</b></div>
-${ym===cur?(()=>{const c30=curMargin(S.log,S.pay,S.hist,S.shist,t,30),c90=curMargin(S.log,S.pay,S.hist,S.shist,t,90),st=+S.settings.margin_pct||0,f=x=>x.pct===null?'—':x.pct+'%',ref=c90.pct!==null?c90.pct:c30.pct,gap=ref!==null?Math.round((ref-st)*10)/10:null;
-return `<div class="row"><span><b>Estimated margin ngayon</b> <span class="mute sm">(benta − binili, huling ${c90.pct!==null?90:30} araw)</span></span><b>${f(c90.pct!==null?c90:c30)}</b></div><div class="row sub2"><span class="mute">Huling 30 araw</span><span>${f(c30)}</span></div><div class="row sub2"><span class="mute">Huling 90 araw <span class="sm">(mas matatag)</span></span><span>${f(c90)}</span></div><div class="row sub2"><span class="mute">Setting mo</span><span>${st}%</span></div>${gap!==null&&gap<=-1?`<div class="sm neg">⚠️ Mas mababa ang tunay (${ref}%) kaysa sa setting mo (${st}%). Baka masyadong mataas ang estimated tubo at budget.</div>`:gap!==null&&gap>=1?`<div class="sm mute">Mas mataas ang tunay (${ref}%) kaysa sa setting mo (${st}%). Pwede mong itaas ang setting kung gusto mo. Hindi ko ito binabago nang kusa.</div>`:''}<div class="sm mute">Estimate lang: nagbabago ito kapag malaki o kaunti ang stock na binili mo, at kulang kung may bili na hindi nalog. Mas mapagkakatiwalaan ang 90 araw.</div>`;})():''}
-${(()=>{const v=profitView(S.settings,S.log,S.pay,S.hist,S.shist,ym,t);
-return `${m.accrued>0?`<div class="row sub2"><span class="mute">Hindi pa nababayarang gastos na due ngayong buwan <span class="sm">(upa, sweldo; kasama sa profit sa ibaba)</span></span><span>${peso(m.accrued)}</span></div>`:''}
-<div class="row"><span><b>Estimated actual profit</b> <span class="mute sm">(benta × actual margin + GCash − gastos)</span></span><b class="${cls(v.real)}">${pe(v.real)}</b></div>
-${v.gross!==null?`<div class="row sub2"><span class="mute">Estimated kita kada araw <span class="sm">(average benta × ${v.basis.p}%, bago gastos)</span></span><b>${pe(v.gross)}</b></div>`:''}${v.net!==null?`<div class="row sub2"><span class="mute">Estimated tubo kada araw <span class="sm">(pagkatapos ng gastos, hinati sa ${v.el} araw ng buwan)</span></span><b class="${cls(v.net)}">${pe(v.net)}</b></div>`:''}
-<div class="sm mute">Magkaiba ang dalawang profit dahil magkaiba ang margin na ginamit: ang una ay ang ${+S.settings.margin_pct||0}% na setting mo, ang ikalawa ay ang actual na <b>${v.basis.p}%</b> (${v.basis.l}). Hindi ito nadadala ng laki ng binili mong stock sa isang buwan.</div>
-${m.loanPaid>0?`<div class="row sub2"><span class="mute">Hulog sa utang ${peso(m.loanPaid)} · gastos lang ang interes</span><span>${m.loanInt>0?peso(m.loanInt):'<span class="neg">₱0, ilagay sa Settings</span>'}</span></div>`:''}
-<div class="row sub2"><span class="mute">Binili ngayong buwan <span class="sm">(stock, kasama ang credit)</span></span><span>${peso(v.buy)}</span></div>
-${v.mg!==null?`<div class="row sub2"><span class="mute">Margin ng buwan na ito lang <span class="sm">(benta bawas binili)</span></span><span>${v.mg}%</span></div>`:''}
-<div class="sm mute" style="margin-top:4px">Estimate lang: ${ym===cur?'hindi pa tapos ang buwan, at kulang ang bili kung may hindi nalog. ':''}Kung mali ang nalog na bili sa nakaraang 90 araw, mali rin ang margin na ginamit dito.</div>`;})()}
+<div class="row"><span><b>Estimated actual profit</b> <span class="mute sm">(benta × actual margin + GCash${m.other>0?' + ibang kita':''} − gastos)</span></span><b class="${v.real===null?'':cls(v.real)}">${v.real===null?'—':pe(v.real)}</b></div>
+<div class="sm mute">${v.basis?`Base sa actual margin na <b>${v.basis.p}%</b> (${v.basis.l}). Estimate lang ito: hindi pa tapos ang buwan, at kulang ang bili kung may hindi nalog.`:'Kulang pa ang datos ng bili para makuwenta ang tubo. Ilagay muna ang mga bili sa Bili para magkaroon ng actual margin.'}</div>
+${m.loanPaid>0?mrow('Hulog sa utang '+peso(m.loanPaid)+' · gastos lang ang interes',m.loanInt>0?peso(m.loanInt):'<span class="neg">₱0, ilagay sa Settings</span>'):''}
+<details class="grp" style="margin-top:8px"><summary>Detalye ng pera sa store</summary><div style="padding:0 14px 12px">
+${v.avgSales!==null?mrow('Average benta kada araw <span class="sm">('+v.ds+' araw na may benta)</span>',peso(v.avgSales)):''}
+<div class="row"><span class="mute">Cash-in fee, cash-out fee, load</span><span>${peso(m.feeIn)} · ${peso(m.feeOut)} · ${peso(m.loadP)}</span></div>
+<div class="row"><span class="mute">Stock (binili + bayad supplier)</span><span>${peso(m.stock+m.sup)}</span></div>
+${mrow('Stock na nilog',peso(m.stock))}${mrow('Bayad supplier',peso(m.sup))}
+<div class="row"><span class="mute">Gastos (hindi stock)</span><span>${peso(m.opex+m.staff+m.store)}</span></div>
+${mrow('Gastos sa log',peso(m.opex))}${mrow('Sweldo',peso(m.staff))}${mrow('Bayarin ng store (upa, kuryente...)',peso(m.store))}
+<div class="row"><span class="mute">Labas ng pera sa store (stock + gastos)</span><span>${peso(m.storeOut)}</span></div>
+${m.accrued>0?mrow('Hindi pa nababayarang gastos na due ngayong buwan <span class="sm">(upa, sweldo; kasama sa profit)</span>',peso(m.accrued)):''}
+<div class="row"><span class="mute">Binili ngayong buwan <span class="sm">(stock, kasama ang credit)</span></span><span>${peso(v.buy)}</span></div>
+</div></details>
 <button class="ghost full" style="margin-top:10px" data-tab="rep">Buong report ng buwan</button>
-${verdict?`<div class="sm" style="margin-top:8px">${verdict}</div>`:''}</div></div><div>${cashCard()}${budgetCard}</div></div>`;
+${verdict?`<div class="sm" style="margin-top:8px">${verdict}</div>`:''}</div>`;
+  return `<div class="two"><div>${hello}${mascot}${dueB}<div class="card"><h3>Kabuuang pera</h3><div class="big ${cls(f.total)}">${peso(f.total)}</div>
+<div class="sm mute" style="margin:4px 0 10px">Pera pambili ng stock: <b>${pe(f.cash0)}</b>${Math.abs(f.poolOut)>=0.005?' · hindi kasama ang '+pe(f.poolOut)+' ('+poolOutNames()+')':''} <button type="button" class="ghost sm" data-act="gopool" style="min-height:28px;padding:2px 10px;margin-left:4px">Palitan</button></div>
+${tiles()}
+${ui.bd?`<div class="bdbox"><b>Paano nabuo ang ${esc(bdW().name)}</b>${breakdown(S.settings,S.log,S.pay,S.transfers,ui.bd).map(x=>`<div class="row"><span>${x[0]}</span><span class="${x[1]<0?'neg':''}">${x[1]<0?'−':''}${peso(Math.abs(x[1]))}</span></div>`).join('')}<div class="row"><b>Kabuuan</b><b>${peso(wbal(calcWallets(S.settings,S.log,S.pay,S.transfers),bdW()))}</b></div><div class="sm mute">Kung may mali, hanapin dito kung alin ang sobra o kulang, tapos burahin o ayusin ang entry.</div>${ui.bd==='drawer'&&f.drawer>0?`<button class="full" style="margin-top:10px" data-act="drawer2cash">Ilipat ang ${peso(f.drawer)} sa Cash</button>`:''}</div>`:''}
+${HR?`<div class="sm mute">Pwedeng kunin para sa personal (bukod sa nakalistang bayarin at sa karaniwan mong personal na gastos): <b>${peso(HR.personal)}</b></div>
+<div class="row" style="margin-top:8px"><span>Ligtas na gastusin kada linggo</span><b>${peso(HR.weekly)}</b></div><div class="sm mute">Para manatili sa buffer sa susunod na 4 na linggo, pagkatapos ng mga bayarin, bili, at gastos. Binawasan ng 20%. Iisang pondo ito sa "Pwedeng idagdag na bili": kapag kinuha mo ito, bababa iyon.</div>`:`<div class="sm mute">Pwedeng kunin para sa personal (bukod sa nakalistang bayarin${fopt&&fopt.persRate>0?' at sa karaniwan mong personal na gastos':''}): <b>${pe(f.safe)}</b></div>
+<div class="row" style="margin-top:8px"><span>Ligtas na gastusin kada linggo</span><b>${peso(f.weekly)}</b></div><div class="sm mute">Para manatili sa buffer sa susunod na 4 na linggo, pagkatapos ng mga bayarin, stock, at gastos. 70% lang ng karaniwang kita ang isinama.${f.lowData?' Walang kita na isinama dahil kulang pa ang datos ng benta.':''}</div>`}</div>
+${budgetCard}</div><div>${fc}<div class="card"><h3>Susunod na bayarin</h3>${up}</div>${monthCard}${cashCard()}</div></div>`;
 }
 
 function logFields(t){
   const n=(k,l)=>`<label>${l}</label><input type="number" name="${k}" inputmode="decimal" min="0" step="any" placeholder="0">`;
-  if(t==='benta')return n('sales','Total na benta (galing POS, kasama ang binayad via GCash)')+`<div class="sm mute" style="margin-top:6px">May customer na nagbayad via GCash? Ilagay iyon sa 📱 GCash tab para madagdag sa GCash wallet. Hindi madodoble ang benta.</div>`;
   const grp=(nm,title,hint,inner,open)=>`<details class="grp" name="${nm}"${open?' open':''}><summary><span>${title}</span><i class="sm mute">${hint}</i></summary><div class="gin">${inner}</div></details>`;
+  if(t==='benta'){const oldB=srvVer!==null&&srvVer<25;return n('sales','Total na benta (galing POS, kasama ang binayad via GCash)')+`<div class="sm mute" style="margin-top:6px">May customer na nagbayad via GCash? Ilagay iyon sa 📱 GCash tab para madagdag sa GCash wallet. Hindi madodoble ang benta.</div>`+(oldB?`<div class="banner warn" style="margin-top:10px">⚠️ Para magamit ang 💵 Ibang kita, i-update muna ang Code.gs sa v25 (Settings).</div>`:grp('o','💵 Ibang kita','labas ng store, hindi benta',n('otherinc','Halaga na natanggap (cash)')+`<div class="sm mute" style="margin-top:6px">Para sa kita na galing sa labas ng store. Papasok ito sa Cash at madadagdag sa profit sa Reports, pero hindi ito benta: hindi nito tataasan ang budget sa stock o babaguhin ang margin.</div>`));}
   if(t==='gcash')return `<div class="sm mute" style="margin:2px 0 8px">Pumili ng ginawa mo, tapos punan lang ang kailangan.</div>`
     +grp('g','💳 Customer nagbayad via GCash','walang charge',n('gsales','Halaga na binayad via GCash (kasama na sa Total na benta)')+`<div class="sm mute">Ililipat lang nito ang halaga mula sa Cash papunta sa GCash wallet. Hindi nito dinadagdagan ang benta.</div>`)
     +grp('g','⬆️ Cash-in','nag-send ako, customer nag-abot ng cash',n('cashin','Halaga na na-send ko')+n('fee','Fee (cash na pumasok)')+`<div class="sm mute">Ang cash na tinanggap (halaga + fee) ay mapupunta sa 🧰 Pera ng GCash, hindi sa Cash ng store.</div>`)
@@ -1063,7 +1176,7 @@ function dayLabel(d){
 }
 function entryInfo(l,T){
   const L=[],m=(c,v,x)=>{if(+v)L.push(c+' '+peso(v)+(x||''));};
-  if(T==='benta')return{has:+l.sales>0,amt:+l.sales||0,lines:[]};
+  if(T==='benta')return{has:+l.sales>0||+l.otherinc>0,amt:+l.sales||0,other:+l.otherinc||0,lines:+l.otherinc>0?['💵 Ibang kita '+peso(l.otherinc)+' (hindi benta)']:[]};
   if(T==='gastos'){
     m('📦 Stock'+(l.supplier?' · '+esc(l.supplier):''),l.stock,+l.gstock?' (GCash '+peso(l.gstock)+')':'');
     m('🧾 Gastos',l.opex,+l.gopex?' (GCash '+peso(l.gopex)+')':'');
@@ -1079,10 +1192,10 @@ function entriesCard(T){
   const title={benta:'Benta',gastos:'Gastos',gcash:'GCash'}[T];
   const rows=S.log.map(l=>({l,i:entryInfo(l,T)})).filter(x=>x.i.has).sort((a,b)=>b.l.date.localeCompare(a.l.date)).slice(0,600);
   const groups=[];
-  rows.forEach(r=>{let g=groups[groups.length-1];if(!g||g.d!==r.l.date){g={d:r.l.date,items:[],tot:0};groups.push(g);}g.items.push(r);g.tot+=r.i.amt;g.st=(g.st||0)+(r.i.stock||0);g.ox=(g.ox||0)+(r.i.opex||0);});
+  rows.forEach(r=>{let g=groups[groups.length-1];if(!g||g.d!==r.l.date){g={d:r.l.date,items:[],tot:0};groups.push(g);}g.items.push(r);g.tot+=r.i.amt;g.ot=(g.ot||0)+(r.i.other||0);g.st=(g.st||0)+(r.i.stock||0);g.ox=(g.ox||0)+(r.i.opex||0);});
   const N=ui.entN||3,tot=groups.length,shown=groups.slice(0,N);
-  const html=shown.map(g=>`<div class="dayh"><span>${dayLabel(g.d)}</span><b>${T==='gcash'?'Kita ':''}${T==='gastos'?'Stock '+peso(g.st)+' · Gastos '+peso(g.ox):peso(g.tot)}</b></div>`
-    +g.items.map(r=>`<div class="ent"><div><b>${esc(r.l.notes)||title}</b>${r.i.lines.map(x=>`<div class="sm mute">${x}</div>`).join('')}</div><div class="ent-r">${r.i.amt?`<b>${peso(r.i.amt)}</b>`:''}<button class="ghost sm" data-act="editlog" data-id="${esc(r.l.id)}" aria-label="Edit">✏️</button><button class="danger sm" data-act="dellog" data-id="${esc(r.l.id)}">✕</button></div></div>`).join('')).join('');
+  const html=shown.map(g=>`<div class="dayh"><span>${dayLabel(g.d)}</span><b>${T==='gcash'?'Kita ':''}${T==='gastos'?'Stock '+peso(g.st)+' · Gastos '+peso(g.ox):peso(g.tot)+(g.ot>0?' · Ibang kita '+peso(g.ot):'')}</b></div>`
+    +g.items.map(r=>`<div class="ent"><div><b>${esc(r.l.notes)||(T==='benta'&&!(+r.l.sales)?'Ibang kita':title)}</b>${r.i.lines.map(x=>`<div class="sm mute">${x}</div>`).join('')}</div><div class="ent-r">${r.i.amt?`<b>${peso(r.i.amt)}</b>`:''}<button class="ghost sm" data-act="editlog" data-id="${esc(r.l.id)}" aria-label="Edit">✏️</button><button class="danger sm" data-act="dellog" data-id="${esc(r.l.id)}">✕</button></div></div>`).join('')).join('');
   const more=tot>N?`<button class="ghost full" style="margin-top:10px" data-act="moreent">Ipakita pa (${tot-N} araw pa)</button>`:'',less=N>3&&tot>3?`<button class="ghost full" style="margin-top:10px" data-act="lessent">Ipakita ang huling 3 araw lang</button>`:'';
   return `<div class="card"><h3>Huling ${title.toLowerCase()} entries</h3>${html||'<div class="mute">Wala pa.</div>'}${more}${tot<=N?less:''}</div>`;
 }
@@ -1131,7 +1244,7 @@ function editLogCard(){
   const l=S.log.find(x=>x.id===ui.editLog);if(!l)return '';
   const n=(k,lab)=>`<label>${lab}</label><input type="number" name="${k}" inputmode="decimal" min="0" step="any" value="${+l[k]||''}" placeholder="0">`;
   return `<div class="card"><h3>I-edit ang entry</h3><form id="fEditLog"><label>Petsa</label><input type="date" name="date" value="${esc(l.date)}" required>
-${n('sales','Total na benta (POS)')}${n('gsales','Binayad via GCash (kasama sa benta)')}
+${n('sales','Total na benta (POS)')}${n('gsales','Binayad via GCash (kasama sa benta)')}${srvVer!==null&&srvVer<25&&!(+l.otherinc)?'':n('otherinc','Ibang kita (labas ng store, cash). Hindi ito benta')}
 <div class="sub">GCash</div>${n('cashin','Cash-in: halaga na na-send ko')}${n('fee','Cash-in fee')}${n('cashout','Cash-out: cash na inabot ko')}${n('cofee','Cash-out fee')}${n('loadsale','Load: cash na tinanggap')}${n('loadcost','Load: ibinawas sa GCash')}
 <div class="sub">Gastos ng store</div>${n('stock','Stock (bayad agad)')}<label>Supplier (opsyonal)</label><select name="supplier" data-sup>${supOpts(l.supplier||'')}</select>${n('gstock','Doon, binayad via GCash')}${n('opex','Ibang gastos ng store')}${n('gopex','Doon, binayad via GCash')}
 <label>Note</label><input name="notes" maxlength="200" value="${esc(l.notes)}">
@@ -1150,9 +1263,10 @@ function renderLog(){
   const pers='';
   let body;
   if(T==='bili'){
-    body=`<div class="card"><h3>Bili sa supplier</h3><div class="sm mute">Isang entry lang para sa bawat bili. Huwag mo na itong i-log ulit bilang stock sa Benta o sa Bayarin, para hindi madoble sa budget.</div>
+    body=`<div class="card"><h3>Bili sa supplier</h3><div class="sm mute">Isang entry lang para sa bawat bili. Huwag mo na itong i-log ulit bilang Stock sa Gastos o sa Bayarin, para hindi madoble sa budget.</div>
 <form id="fBili"><label>Supplier</label><select name="supplier" data-sup required>${supOpts('',true)}</select>
 <label>Halaga</label><input type="number" name="amount" inputmode="decimal" min="0" step="any" required>
+<div id="biliHint" class="sm mute" style="margin-top:6px" aria-live="polite"></div>
 <label>Petsa ng bili</label><input type="date" name="date" value="${t}" required>
 <label>Paano binayaran?</label><select name="how"><option value="">Credit (babayaran mamaya)</option>${payWallets().map(w=>`<option value="${esc(w.id)}">Bayad na ngayon sa ${esc(w.name)}</option>`).join('')}</select>
 <label>Terms <span class="mute sm">· kung utang</span></label><select name="terms"><option value="7">7 araw</option><option value="14">14 araw</option><option value="21">21 araw</option><option value="28">28 araw</option></select>
@@ -1232,10 +1346,10 @@ function renderSet(){
 <label>Apps Script Web App URL</label><input name="url" value="${esc(cfg.url)}" placeholder="https://script.google.com/macros/s/.../exec">
 <label>PIN (kung nilagay mo sa Code.gs)</label><input name="pin" value="${esc(cfg.pin)}" type="password" autocomplete="off">
 <button class="full">I-save at i-test</button></form></div>`;
-  const PCT=['margin_pct','budget_pct','future_pct'],sv=k=>(k==='budget_pct'||k==='future_pct')?(+s[k]>=50&&+s[k]<=100?+s[k]:85):(+s[k]||0);
-  const F=[['opening_cash','Panimulang Cash','Cash na hawak mo nung nagsimula ka mag-log'],['opening_gcash','Panimulang GCash','Balance ng GCash wallet nung nagsimula ka'],['opening_drawer','Panimulang Pera ng GCash','Cash sa drawer ng cash-in at load'],['opening_huling','Panimulang Huling Benta','Perang iniwan mo sa store bilang huling benta'],['opening_utang','Panimulang Utang ng iba','Total na utang sa iyo nung nagsimula ka (hindi kasama sa Kabuuang pera)'],['opening_personal','Panimulang Personal','Pera na pang-sarili mo'],['opening_barya','Panimulang Barya','Coins ng store, hiwalay sa Pondo'],['margin_pct','Margin ng tubo (%)','Estimate ng tubo sa benta'],['buffer','Buffer','Pinakamababang cash na gusto mong laging may natitira'],['budget_pct','Budget sa pambili (% ng estimated na benta)','Default 85. Mas mababa = mas konserbatibo. Ang bili mo sa nakaraang buwan ay nasa Reports.'],['future_pct','Benta sa natitirang araw (% ng karaniwan)','Default 85. Ito ang bahagi ng karaniwang benta na binibilang sa mga araw na wala pa. Mas mababa = mas konserbatibo.'],['loan_interest','Interes ng utang kada buwan','Gastos lang ang interes, hindi ang buong hulog. Kasama ito sa tubo kapag may hulog na nabayaran sa buwan']];
+  const PCT=['budget_pct','future_pct'],sv=k=>(k==='budget_pct'||k==='future_pct')?(+s[k]>=50&&+s[k]<=100?+s[k]:85):(+s[k]||0);
+  const F=[['opening_cash','Panimulang Cash','Cash na hawak mo nung nagsimula ka mag-log'],['opening_gcash','Panimulang GCash','Balance ng GCash wallet nung nagsimula ka'],['opening_drawer','Panimulang Pera ng GCash','Cash sa drawer ng cash-in at load'],['opening_huling','Panimulang Huling Benta','Perang iniwan mo sa store bilang huling benta'],['opening_utang','Panimulang Utang ng iba','Total na utang sa iyo nung nagsimula ka (hindi kasama sa Kabuuang pera)'],['opening_personal','Panimulang Personal','Pera na pang-sarili mo'],['opening_barya','Panimulang Barya','Coins ng store, hiwalay sa Pondo'],['buffer','Buffer','Pinakamababang cash na gusto mong laging may natitira'],['budget_pct','Budget sa pambili (% ng estimated na benta)','Default 85. Mas mababa = mas konserbatibo. Ang bili mo sa nakaraang buwan ay nasa Reports.'],['future_pct','Benta sa natitirang araw (% ng karaniwan)','Default 85. Ito ang bahagi ng karaniwang benta na binibilang sa mga araw na wala pa. Mas mababa = mas konserbatibo.'],['loan_interest','Interes ng utang kada buwan','Gastos lang ang interes, hindi ang buong hulog. Kasama ito sa tubo kapag may hulog na nabayaran sa buwan']];
   if(!ui.setEdit)return conn+`<div class="card"><h3>Pera</h3>${F.map(f=>`<div class="row"><span>${f[1]}<div class="sm mute">${f[2]}</div></span><b>${PCT.includes(f[0])?sv(f[0])+'%':peso(+s[f[0]]||0)}</b></div>`).join('')}
-<button class="ghost full" data-act="setedit">✏️ Baguhin</button></div>${walletMgr()}${supMgr()}${histMgr()}${salesMgr()}${backupCard()}`;
+<button class="ghost full" data-act="setedit">✏️ Baguhin</button></div>${poolMgr()}${walletMgr()}${supMgr()}${histMgr()}${salesMgr()}${backupCard()}`;
   return conn+`<div class="sm mute" style="margin:0 4px 10px">Bersyon ng app: ${BUILD}</div><div class="card"><h3>Baguhin ang Settings</h3><div class="banner warn">Baguhin lang ito kung sigurado ka. Apektado ang lahat ng balance at forecast.</div><form id="fSet">
 ${F.map(f=>`<label>${f[1]} <span class="mute sm">· ${f[2]}</span></label><input type="number" name="${f[0]}" inputmode="decimal" step="any" value="${sv(f[0])}">`).join('')}
 <div class="grid2"><button class="full">I-save</button><button type="button" class="ghost full" data-act="setcancel">Kansel</button></div></form></div>`;
@@ -1257,7 +1371,7 @@ function render(){
   try{$('#app').innerHTML=ew+warn+(ui.tab==='home'?renderHome():ui.tab==='log'?renderLog():ui.tab==='bills'?renderBills():ui.tab==='rep'?renderReports():renderSet());}
   catch(e){console.error(e);$('#app').innerHTML='<div class="card"><h3>May problema sa pagpapakita</h3><div class="sm mute">Hindi nawala ang data mo sa Google Sheet. Pindutin ang button para i-clear ang naka-save na kopya sa phone at mag-load ulit.</div><button class="full" style="margin-top:10px" data-act="resetcache">I-reset at mag-load ulit</button><div class="sm mute" style="margin-top:8px">'+esc(String(e&&e.message||e))+'</div></div>';}
   window.scrollTo(0,y);
-  updAdj();
+  updAdj();try{biliHint();}catch(_){}
 }
 
 document.addEventListener('click',async ev=>{
@@ -1276,7 +1390,6 @@ document.addEventListener('click',async ev=>{
   if(a==='paiddel'){const p=S.pay.find(x=>x.id===id);if(p&&confirm('Burahin ang bayad na "'+p.name+'" ('+peso(p.amount)+')? Babalik ang pera sa '+wname(p.wallet||'Cash')+' at mawawala ito sa listahan.')){ui.paidMore=null;await run({action:'delPayable',id},'Binura');}return;}
   if(a==='chatno'){ui.chat=null;return render();}
   if(a==='chatadd'){if(await run({action:'saveSupplier',name:el.dataset.n},'Naidagdag ✓')){const r=parseChat(ui.chatText||'',todayStr(),supKnown());ui.chat=(r.items.length||r.errors.length)?r:null;render();}return;}
-  if(a==='usemargin'){const v=+el.dataset.v;if(v>0&&v<100&&confirm('Gawing '+v+'% ang margin sa Settings? Maibabalik mo ito anumang oras sa pamamagitan ng ✏️ Baguhin.'))await run({action:'saveSettings',settings:{margin_pct:v}},'Na-save ✓');return;}
   if(a==='waledit'){ui.walEdit=id;return render();}
   if(a==='walcancel'){ui.walEdit=null;return render();}
   if(a==='walhide'){const w=walletList(true).find(x=>x.id===id),b=w?wbal(calcWallets(S.settings,S.log,S.pay,S.transfers),w):0;if(!w)return;if(Math.abs(b)>=0.005){toast('⚠️ May laman pa ang '+w.name+' ('+peso(b)+'). Gawing zero muna bago itago.','err');return;}if(confirm('Itago ang "'+w.name+'"? Maibabalik mo ito anumang oras.'))await run({action:'setWalletActive',id,active:false},'Naitago');return;}
@@ -1321,6 +1434,7 @@ document.addEventListener('click',async ev=>{
   if(a==='more'){ui.more=id;ui.pay=null;ui.form=false;ui.edit=null;return render();}
   if(a==='closepay'){ui.pay=null;ui.more=null;return render();}
   if(a==='setedit'){ui.setEdit=true;render();window.scrollTo(0,0);return;}
+  if(a==='gopool'){ui.tab='set';ui.setEdit=false;render();setTimeout(()=>{const e=document.getElementById('poolCard');if(e)e.scrollIntoView();},60);return;}
   if(a==='setcancel'){ui.setEdit=false;return render();}
   if(a==='newbill'){ui.form=true;ui.edit=null;render();window.scrollTo(0,0);return;}
   if(a==='cancel'){ui.form=false;ui.edit=null;return render();}
@@ -1402,6 +1516,7 @@ document.addEventListener('change',async ev=>{const e=ev.target;
       if(fid==='fBill')billType(nf);}
   }
 });
+['input','change'].forEach(n=>document.addEventListener(n,ev=>{const e=ev.target;if(e&&e.form&&e.form.id==='fBili'&&/^(supplier|amount|date)$/.test(e.name||''))try{biliHint();}catch(_){}}));
 document.addEventListener('input',ev=>{
   if(ev.target.form&&ev.target.form.id==='fAdj')updAdj();
   const f=ev.target.form;
@@ -1425,12 +1540,14 @@ document.addEventListener('submit',async ev=>{
   }else if(f.id==='fLog'){
     {const sc=supCheck(d.supplier,supKnown());d.supplier=(+d.stock>0)?sc.name:'';if(d.supplier&&sc.near&&confirm('Ibig mo bang sabihin "'+sc.near+'"?\n\nOK = gamitin ang "'+sc.near+'"\nCancel = gamitin ang "'+sc.name+'" (bagong supplier)'))d.supplier=sc.near;}
     if(+d.stock>0&&d.supplier){const dd=dupStock(d.supplier,+d.stock,d.date,'log');if(dd.length&&!confirm('Mukhang nailagay mo na ang bili na ito:\n\n'+dd.join('\n')+'\n\nI-log pa rin ang stock? (Kung dobleng bilang, Cancel)'))return;}
-    if(+d.stock>0&&d.supplier){const om=overMsg(d.supplier,+d.stock);if(om&&!confirm('⚠️ '+om+'\n\nI-log pa rin ang stock? (Cancel kung hindi pa dapat bilhin)'))return;}
+    if(+d.stock>0&&d.supplier){const om=overMsg(d.supplier,+d.stock,d.date);if(om&&!confirm('⚠️ '+om+'\n\nI-log pa rin ang stock? (Cancel kung hindi pa dapat bilhin)'))return;}
     if(+d.cashout&&d.feemode!=='extra'){const h=(+d.cashout)-(+d.cofee||0);if(h<0){toast('⚠️ Mas malaki ang fee kaysa sa cash-out','err');return;}d.cashout=String(Math.round(h*100)/100);}
-    if(await run({action:'addLog',date:d.date,sales:d.sales,stock:d.stock,opex:d.opex,cashin:d.cashin,cashout:d.cashout,fee:d.fee,cofee:d.cofee,gsales:d.gsales,loadsale:d.loadsale,loadcost:d.loadcost,gstock:d.gstock,gopex:d.gopex,supplier:d.supplier,notes:d.notes},'Na-save ✓'))render();
+    if(+d.otherinc>0&&srvVer!==null&&srvVer<25){toast('⚠️ I-update muna ang Code.gs sa v25 para sa Ibang kita','err');return;}
+    if(await run({action:'addLog',date:d.date,sales:d.sales,stock:d.stock,opex:d.opex,cashin:d.cashin,cashout:d.cashout,fee:d.fee,cofee:d.cofee,gsales:d.gsales,loadsale:d.loadsale,loadcost:d.loadcost,gstock:d.gstock,gopex:d.gopex,otherinc:d.otherinc,supplier:d.supplier,notes:d.notes},'Na-save ✓'))render();
   }else if(f.id==='fEditLog'){
     {const sc=supCheck(d.supplier,supKnown());d.supplier=(+d.stock>0)?sc.name:'';if(d.supplier&&sc.near&&confirm('Ibig mo bang sabihin "'+sc.near+'"?\n\nOK = gamitin ang "'+sc.near+'"\nCancel = gamitin ang "'+sc.name+'" (bagong supplier)'))d.supplier=sc.near;}
-    const ok=await run({action:'editLog',id:ui.editLog,date:d.date,sales:d.sales,stock:d.stock,opex:d.opex,cashin:d.cashin,cashout:d.cashout,fee:d.fee,cofee:d.cofee,gsales:d.gsales,loadsale:d.loadsale,loadcost:d.loadcost,gstock:d.gstock,gopex:d.gopex,supplier:d.supplier,notes:d.notes},'Na-update ✓');
+    if(+d.otherinc>0&&srvVer!==null&&srvVer<25){toast('⚠️ I-update muna ang Code.gs sa v25 para sa Ibang kita','err');return;}
+    const ok=await run({action:'editLog',id:ui.editLog,date:d.date,sales:d.sales,stock:d.stock,opex:d.opex,cashin:d.cashin,cashout:d.cashout,fee:d.fee,cofee:d.cofee,gsales:d.gsales,loadsale:d.loadsale,loadcost:d.loadcost,gstock:d.gstock,gopex:d.gopex,otherinc:d.otherinc,supplier:d.supplier,notes:d.notes},'Na-update ✓');
     if(ok){ui.editLog=null;render();}
   }else if(f.id==='fPers'){
     const before=new Set(S.pay.map(p=>p.id));
@@ -1442,7 +1559,7 @@ document.addEventListener('submit',async ev=>{
     const amt=+d.amount;if(!(amt>0)){toast('⚠️ Ilagay ang halaga','err');return;}
     const dd=dupStock(d.supplier,amt,d.date);
     if(dd.length&&!confirm('Mukhang nailagay mo na ito:\n\n'+dd.join('\n')+'\n\nIlagay pa rin? (Kung dobleng bilang, Cancel)'))return;
-    {const om=overMsg(d.supplier,amt);if(om&&!confirm('⚠️ '+om+'\n\nIlagay pa rin? (Cancel kung hindi pa dapat bilhin)'))return;}
+    {const om=overMsg(d.supplier,amt,d.date);if(om&&!confirm('⚠️ '+om+'\n\nIlagay pa rin? (Cancel kung hindi pa dapat bilhin)'))return;}
     const before=new Set(S.pay.map(p=>p.id));
     const ok=await run({action:'savePayable',type:'Supplier',name:d.supplier,amount:amt,due:d.how?d.date:addDays(d.date,+d.terms||7),repeat:'none',notes:'Bili',receipt:d.date},d.how?undefined:'Na-save ✓');
     if(!ok)return;
@@ -1469,7 +1586,7 @@ document.addEventListener('submit',async ev=>{
   }else if(f.id==='fPaid'){
     if(await run({action:'editPaid',id:d.pid,type:d.type,name:d.name,amount:d.amount,paidDate:d.paidDate,wallet:d.wallet,notes:d.notes},'Na-save ✓')){ui.paidEdit=null;render();}
   }else if(f.id==='fSet'){
-    const keys=['opening_cash','opening_gcash','opening_drawer','opening_huling','opening_utang','opening_personal','opening_barya','margin_pct','buffer','loan_interest','budget_pct','future_pct'],lab={opening_cash:'Cash',opening_gcash:'GCash',opening_drawer:'Pera ng GCash',opening_huling:'Huling Benta',opening_utang:'Utang ng iba',opening_personal:'Personal',opening_barya:'Barya',margin_pct:'Margin %',buffer:'Buffer',loan_interest:'Interes ng utang kada buwan',budget_pct:'Budget sa pambili %',future_pct:'Benta sa natitirang araw %'};
+    const keys=['opening_cash','opening_gcash','opening_drawer','opening_huling','opening_utang','opening_personal','opening_barya','buffer','loan_interest','budget_pct','future_pct'],lab={opening_cash:'Cash',opening_gcash:'GCash',opening_drawer:'Pera ng GCash',opening_huling:'Huling Benta',opening_utang:'Utang ng iba',opening_personal:'Personal',opening_barya:'Barya',buffer:'Buffer',loan_interest:'Interes ng utang kada buwan',budget_pct:'Budget sa pambili %',future_pct:'Benta sa natitirang araw %'};
     const ch=keys.filter(k=>(+d[k]||0)!==(+S.settings[k]||0));
     if(!ch.length){ui.setEdit=false;return render();}
     if(!confirm('I-save ang pagbabago?\n\n'+ch.map(k=>lab[k]+': '+(+S.settings[k]||0)+' → '+(+d[k]||0)).join('\n')))return;
@@ -1478,6 +1595,12 @@ document.addEventListener('submit',async ev=>{
     const body={action:'saveWallet',id:d.wid||undefined,name:d.name};
     if(!d.wid||String(d.wid).indexOf('w_')===0){body.opening=d.opening;body.inTotal=d.intotal?'1':'0';}
     if(await run(body,'Na-save ✓')){ui.walEdit=null;render();}
+  }else if(f.id==='fPool'){
+    const mask=[...f.querySelectorAll('input[name=pw]:checked')].reduce((t,x)=>t+(+x.value||0),0);
+    if(mask===poolMask(S.settings)){toast('Walang pagbabago','ok');return;}
+    const cur=calcWallets(S.settings,S.log,S.pay,S.transfers).pool,nw=calcWallets(Object.assign({},S.settings,{pool_mask:mask}),S.log,S.pay,S.transfers).pool;
+    if(!confirm('Pera pambili: '+peso(cur)+' → '+peso(nw)+'\n\nIto ang gagamitin ng budget at forecast. Hindi nito binabago ang laman ng mga wallet. I-save?'))return;
+    if(await run({action:'saveSettings',settings:{pool_mask:mask}},'Na-save ✓'))render();
   }else if(f.id==='fSup'){
     if(await run({action:'saveSupplier',name:d.name},'Naidagdag ✓'))render();
   }else if(f.id==='fCfg'){
